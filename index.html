@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tammy Padal — Tech News Drafts</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --bg: #0a0f0d;
+    --panel: #0f1613;
+    --panel-2: #131c18;
+    --line: #1e2b25;
+    --trace: #4ade80;
+    --trace-dim: #2f6b48;
+    --copper: #c9885a;
+    --text: #e8ede9;
+    --text-dim: #8fa89a;
+    --amber: #e0b04a;
+    --gray: #5a6b63;
+    --danger: #e0685a;
+  }
+  *{ box-sizing: border-box; }
+  body{
+    margin:0;
+    background:
+      radial-gradient(circle at 15% 0%, rgba(74,222,128,0.06), transparent 40%),
+      var(--bg);
+    color: var(--text);
+    font-family: 'Sora', sans-serif;
+    padding-bottom: 60px;
+  }
+  ::selection{ background: var(--trace-dim); color: #fff; }
+
+  header{
+    padding: 28px 20px 20px;
+    border-bottom: 1px solid var(--line);
+    position: relative;
+    overflow: hidden;
+  }
+  header::before{
+    content:'';
+    position:absolute; inset:0;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 26px 26px;
+    opacity: 0.25;
+    mask-image: linear-gradient(to bottom, black, transparent);
+  }
+  .header-inner{ position: relative; max-width: 720px; margin: 0 auto; }
+  .eyebrow{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--trace);
+    text-transform: uppercase;
+    display:flex; align-items:center; gap:8px;
+  }
+  .eyebrow::before{
+    content:''; width:6px; height:6px; border-radius:50%;
+    background: var(--trace); box-shadow: 0 0 8px var(--trace);
+  }
+  h1{
+    font-size: 26px; font-weight: 800; margin: 10px 0 4px;
+    letter-spacing: -0.01em;
+  }
+  .sub{ color: var(--text-dim); font-size: 14px; margin: 0; }
+
+  main{ max-width: 720px; margin: 0 auto; padding: 20px; }
+
+  .controls{
+    display:flex; gap:10px; align-items:center; flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
+  button{
+    font-family: 'Sora', sans-serif;
+    border: none; cursor: pointer; border-radius: 10px;
+    font-weight: 600; font-size: 14px;
+    transition: transform 0.1s ease, opacity 0.15s ease;
+  }
+  button:active{ transform: scale(0.97); }
+  .btn-primary{
+    background: var(--trace); color: #05130a;
+    padding: 12px 18px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .btn-primary:disabled{ opacity: 0.5; cursor: default; }
+  .btn-ghost{
+    background: transparent; color: var(--text-dim);
+    border: 1px solid var(--line); padding: 11px 14px;
+  }
+  .btn-ghost.active{ color: var(--trace); border-color: var(--trace-dim); }
+
+  .tabs{ display:flex; gap: 8px; margin-left: auto; }
+
+  .status-line{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px; color: var(--text-dim);
+    margin-bottom: 16px; min-height: 16px;
+  }
+  .status-line.error{ color: var(--danger); }
+
+  .card{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 16px;
+    position: relative;
+    display: flex;
+    gap: 14px;
+  }
+  .pin{
+    width: 3px; border-radius: 3px; flex-shrink: 0;
+    background: var(--trace-dim);
+  }
+  .card[data-status="draft"] .pin{ background: var(--amber); }
+  .card[data-status="approved"] .pin{ background: var(--trace); box-shadow: 0 0 10px var(--trace); }
+  .card[data-status="posted"] .pin{ background: var(--gray); }
+
+  .card-body{ flex: 1; min-width: 0; }
+  .card-top{
+    display:flex; justify-content: space-between; align-items: flex-start;
+    gap: 10px; margin-bottom: 8px;
+  }
+  .tag-row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .cat{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--copper); border: 1px solid var(--copper);
+    padding: 2px 7px; border-radius: 5px;
+  }
+  .status-pill{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 5px; color: var(--text-dim);
+  }
+  .card[data-status="draft"] .status-pill{ color: var(--amber); }
+  .card[data-status="approved"] .status-pill{ color: var(--trace); }
+  .card[data-status="posted"] .status-pill{ color: var(--gray); }
+
+  .headline{ font-size: 16px; font-weight: 700; margin: 0 0 4px; line-height: 1.35; }
+  .source-line{ font-size: 12px; color: var(--text-dim); margin: 0 0 12px; }
+  .source-line a{ color: var(--text-dim); }
+
+  textarea{
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: 'Sora', sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+    padding: 12px;
+    resize: vertical;
+    min-height: 100px;
+  }
+  textarea:focus{ outline: none; border-color: var(--trace-dim); }
+
+  .card-actions{
+    display:flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;
+  }
+  .mini-btn{
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line);
+    padding: 8px 12px; border-radius: 8px; font-size: 12.5px;
+  }
+  .mini-btn.copy.copied{ color: var(--trace); border-color: var(--trace-dim); }
+  .mini-btn.approve{ color: var(--trace); }
+  .mini-btn.posted{ color: var(--gray); }
+  .mini-btn.delete{ color: var(--danger); margin-left: auto; }
+
+  .empty{
+    text-align: center; padding: 60px 20px; color: var(--text-dim);
+  }
+  .empty .glyph{ font-size: 28px; margin-bottom: 10px; opacity: 0.7; }
+  .empty p{ font-size: 13px; max-width: 320px; margin: 6px auto 0; }
+
+  .spinner{
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid rgba(5,19,10,0.3); border-top-color: #05130a;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
+
+  .sources-panel{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px 18px;
+    margin-bottom: 18px;
+  }
+  .sources-head{
+    display:flex; align-items:center; justify-content: space-between;
+    cursor: pointer;
+  }
+  .sources-title{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .sources-count{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px; color: var(--trace);
+  }
+  .chevron{ color: var(--text-dim); font-size: 12px; transition: transform 0.15s ease; }
+  .sources-panel.collapsed .chevron{ transform: rotate(-90deg); }
+  .sources-body{ margin-top: 14px; }
+  .sources-panel.collapsed .sources-body{ display: none; }
+  .source-list{ display:flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .source-chip{
+    display:flex; align-items:center; gap: 7px;
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 20px; padding: 6px 6px 6px 12px;
+    font-size: 12.5px; color: var(--text);
+  }
+  .source-chip button{
+    background: transparent; color: var(--text-dim);
+    border: none; width: 18px; height: 18px; border-radius: 50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size: 13px; line-height: 1; padding: 0;
+  }
+  .source-chip button:hover{ color: var(--danger); }
+  .source-add{ display:flex; gap: 8px; }
+  .source-add input{
+    flex: 1;
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 8px; color: var(--text);
+    font-family: 'Sora', sans-serif; font-size: 13.5px;
+    padding: 10px 12px;
+  }
+  .source-add input:focus{ outline: none; border-color: var(--trace-dim); }
+  .source-add button{
+    background: var(--trace-dim); color: #eafff2;
+    padding: 10px 14px; border-radius: 8px; font-size: 13px;
+  }
+  .source-hint{ font-size: 11.5px; color: var(--text-dim); margin: 10px 0 0; }
+
+  .graphic-block{
+    margin-top: 14px;
+    border-top: 1px dashed var(--line);
+    padding-top: 14px;
+  }
+  .graphic-label{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: 10px; display:block;
+  }
+  .graphic-canvas-wrap{
+    width: 100%; max-width: 320px;
+    border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    margin-bottom: 10px;
+  }
+  .graphic-canvas-wrap canvas{ width: 100%; height: auto; display: block; }
+  .graphic-empty{
+    aspect-ratio: 4/5; display:flex; align-items:center; justify-content:center;
+    color: var(--text-dim); font-size: 12px; text-align:center; padding: 20px;
+  }
+  .graphic-controls{ display:flex; gap: 8px; flex-wrap: wrap; }
+  .file-btn{
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); padding: 8px 12px;
+    border-radius: 8px; font-size: 12.5px; cursor: pointer;
+    display: inline-block;
+  }
+  .file-btn input{ display: none; }
+  .mini-btn.download{ color: var(--copper); }
+
+  @media (max-width: 480px){
+    h1{ font-size: 22px; }
+    .card{ padding: 14px; }
+    .tabs{ margin-left: 0; }
+    .controls{ flex-direction: column; align-items: stretch; }
+    .tabs{ display:grid; grid-template-columns: repeat(4,1fr); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="eyebrow">Draft queue · not auto-posted</div>
+    <h1>Tammy Padal — Tech News Drafts</h1>
+    <p class="sub">Pulls fresh PC hardware/component news and writes ready-to-edit Facebook captions. You review, edit, and post manually.</p>
+  </div>
+</header>
+
+<main>
+  <div class="sources-panel" id="sourcesPanel">
+    <div class="sources-head" id="sourcesHead">
+      <span class="sources-title">Trusted sources <span class="sources-count" id="sourcesCount"></span></span>
+      <span class="chevron">▾</span>
+    </div>
+    <div class="sources-body">
+      <div class="source-list" id="sourceList"></div>
+      <div class="source-add">
+        <input type="text" id="sourceInput" placeholder="Add a site (e.g. yugatech.com or Rock Paper Shotgun)">
+        <button id="sourceAddBtn">Add</button>
+      </div>
+      <p class="source-hint">Drafts will only pull from sites in this list. Remove all to search broadly again.</p>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn-primary" id="genBtn">
+      <span id="genLabel">⚡ Generate drafts</span>
+    </button>
+    <div class="tabs" id="tabs">
+      <button class="btn-ghost active" data-filter="all">All</button>
+      <button class="btn-ghost" data-filter="draft">Draft</button>
+      <button class="btn-ghost" data-filter="approved">Approved</button>
+      <button class="btn-ghost" data-filter="posted">Posted</button>
+    </div>
+  </div>
+  <div class="status-line" id="statusLine"></div>
+  <div id="feed"></div>
+</main>
+
+<script>
+const PAGE_NAME = "Tammy Padal";
+let drafts = [];
+let currentFilter = 'all';
+let sources = [];
+const DEFAULT_SOURCES = [
+  "Tom's Hardware", "Videocardz", "TechPowerUp", "Wccftech", "Notebookcheck", "YugaTech"
+];
+
+const sourceList = document.getElementById('sourceList');
+const sourceInput = document.getElementById('sourceInput');
+const sourceAddBtn = document.getElementById('sourceAddBtn');
+const sourcesCount = document.getElementById('sourcesCount');
+const sourcesHead = document.getElementById('sourcesHead');
+const sourcesPanel = document.getElementById('sourcesPanel');
+
+
+const feed = document.getElementById('feed');
+const genBtn = document.getElementById('genBtn');
+const genLabel = document.getElementById('genLabel');
+const statusLine = document.getElementById('statusLine');
+const tabs = document.getElementById('tabs');
+
+function setStatus(msg, isError=false){
+  statusLine.textContent = msg || '';
+  statusLine.classList.toggle('error', !!isError);
+}
+
+async function loadDrafts(){
+  try{
+    const res = await window.storage.get('drafts', false);
+    drafts = res && res.value ? JSON.parse(res.value) : [];
+  }catch(e){
+    drafts = [];
+  }
+  render();
+}
+
+async function loadSources(){
+  try{
+    const res = await window.storage.get('sources', false);
+    sources = res && res.value ? JSON.parse(res.value) : [...DEFAULT_SOURCES];
+  }catch(e){
+    sources = [...DEFAULT_SOURCES];
+  }
+  renderSources();
+}
+
+async function saveSources(){
+  try{
+    await window.storage.set('sources', JSON.stringify(sources), false);
+  }catch(e){
+    setStatus('Could not save sources list.', true);
+  }
+}
+
+function renderSources(){
+  sourcesCount.textContent = `(${sources.length})`;
+  if(sources.length === 0){
+    sourceList.innerHTML = `<span style="color:var(--text-dim);font-size:12.5px;">No sources set — searches broadly.</span>`;
+    return;
+  }
+  sourceList.innerHTML = sources.map((s, i) => `
+    <span class="source-chip">${escapeHtml(s)}<button data-idx="${i}" title="Remove">&times;</button></span>
+  `).join('');
+}
+
+sourceList.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-idx]');
+  if(!btn) return;
+  const idx = parseInt(btn.dataset.idx, 10);
+  sources.splice(idx, 1);
+  await saveSources();
+  renderSources();
+});
+
+function addSource(){
+  const val = sourceInput.value.trim();
+  if(!val) return;
+  if(sources.some(s => s.toLowerCase() === val.toLowerCase())){
+    sourceInput.value = '';
+    return;
+  }
+  sources.push(val);
+  sourceInput.value = '';
+  saveSources();
+  renderSources();
+}
+sourceAddBtn.addEventListener('click', addSource);
+sourceInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); addSource(); } });
+
+sourcesHead.addEventListener('click', () => sourcesPanel.classList.toggle('collapsed'));
+
+
+async function saveDrafts(){
+  try{
+    await window.storage.set('drafts', JSON.stringify(drafts), false);
+  }catch(e){
+    setStatus('Could not save — your last change may not persist.', true);
+  }
+}
+
+function escapeHtml(str){
+  const d = document.createElement('div');
+  d.textContent = str || '';
+  return d.innerHTML;
+}
+
+function render(){
+  const list = currentFilter === 'all' ? drafts : drafts.filter(d => d.status === currentFilter);
+
+  if(list.length === 0){
+    feed.innerHTML = `
+      <div class="empty">
+        <div class="glyph">◇</div>
+        <p>${drafts.length === 0
+          ? 'No drafts yet. Tap "Generate drafts" to pull today\u2019s PC hardware news.'
+          : 'Nothing in this filter yet.'}</p>
+      </div>`;
+    return;
+  }
+
+  feed.innerHTML = list.map(d => `
+    <div class="card" data-status="${d.status}" data-id="${d.id}">
+      <div class="pin"></div>
+      <div class="card-body">
+        <div class="card-top">
+          <div class="tag-row">
+            <span class="cat">${escapeHtml(d.category || 'Tech')}</span>
+            <span class="status-pill">${d.status}</span>
+          </div>
+        </div>
+        <h3 class="headline">${escapeHtml(d.headline)}</h3>
+        <p class="source-line">${escapeHtml(d.source || '')}${d.url ? ` · <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">source ↗</a>` : ''}</p>
+        <textarea data-id="${d.id}" class="caption-input">${escapeHtml(d.caption)}</textarea>
+        <div class="graphic-block">
+          <span class="graphic-label">Post graphic</span>
+          <div class="graphic-canvas-wrap" id="canvasWrap-${d.id}">
+            ${d.imageData
+              ? `<canvas id="canvas-${d.id}" width="1080" height="1350"></canvas>`
+              : `<div class="graphic-empty">Upload a photo to build the graphic</div>`}
+          </div>
+          <div class="graphic-controls">
+            <label class="file-btn">📷 ${d.imageData ? 'Replace photo' : 'Upload photo'}
+              <input type="file" accept="image/*" class="photo-input" data-id="${d.id}">
+            </label>
+            ${(!d.imageData && d.imageUrl) ? `<button class="mini-btn fetch-photo" data-action="fetch-photo" data-id="${d.id}">🔗 Try fetch from article</button>` : ''}
+            ${d.imageData ? `<button class="mini-btn download" data-action="download" data-id="${d.id}">Download PNG</button>` : ''}
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="mini-btn copy" data-action="copy" data-id="${d.id}">Copy caption</button>
+          ${d.status === 'draft' ? `<button class="mini-btn approve" data-action="approve" data-id="${d.id}">✓ Approve</button>` : ''}
+          ${d.status === 'approved' ? `<button class="mini-btn posted" data-action="posted" data-id="${d.id}">Mark posted</button>` : ''}
+          <button class="mini-btn delete" data-action="delete" data-id="${d.id}">Delete</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  list.forEach(d => {
+    if(d.imageData){ drawGraphic(d); }
+  });
+}
+
+feed.addEventListener('input', (e) => {
+  if(e.target.classList.contains('caption-input')){
+    const id = e.target.dataset.id;
+    const d = drafts.find(x => x.id === id);
+    if(d){ d.caption = e.target.value; saveDrafts(); }
+  }
+});
+
+feed.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if(!btn) return;
+  const id = btn.dataset.id;
+  const d = drafts.find(x => x.id === id);
+  if(!d) return;
+  const action = btn.dataset.action;
+
+  if(action === 'copy'){
+    try{
+      await navigator.clipboard.writeText(d.caption);
+      btn.textContent = 'Copied ✓';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy caption'; btn.classList.remove('copied'); }, 1500);
+    }catch(err){
+      setStatus('Clipboard blocked — select and copy the text manually.', true);
+    }
+  } else if(action === 'download'){
+    const canvas = document.getElementById(`canvas-${id}`);
+    if(canvas){
+      const a = document.createElement('a');
+      a.download = `${(d.headline || 'post').slice(0,40).replace(/[^\w]+/g,'-')}.png`;
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    }
+  } else if(action === 'fetch-photo'){
+    setStatus('Trying to pull the photo from the article…');
+    btn.disabled = true;
+    try{
+      const dataUrl = await fetchImageAsDataUrl(d.imageUrl);
+      d.imageData = dataUrl;
+      await saveDrafts();
+      render();
+      setStatus('');
+    }catch(err){
+      console.warn(err);
+      setStatus('That site blocks reuse of its image — upload the photo manually instead.', true);
+      btn.disabled = false;
+    }
+  } else if(action === 'approve'){
+    d.status = 'approved'; await saveDrafts(); render();
+  } else if(action === 'posted'){
+    d.status = 'posted'; await saveDrafts(); render();
+  } else if(action === 'delete'){
+    drafts = drafts.filter(x => x.id !== id);
+    await saveDrafts(); render();
+  }
+});
+
+feed.addEventListener('change', async (e) => {
+  if(e.target.classList.contains('photo-input')){
+    const id = e.target.dataset.id;
+    const file = e.target.files[0];
+    if(!file) return;
+    const d = drafts.find(x => x.id === id);
+    if(!d) return;
+    setStatus('Processing photo…');
+    try{
+      const dataUrl = await compressImage(file, 1080, 0.85);
+      d.imageData = dataUrl;
+      await saveDrafts();
+      render();
+      setStatus('');
+    }catch(err){
+      console.error(err);
+      setStatus('Could not process that image — try a different file.', true);
+    }
+  }
+});
+
+function fetchImageAsDataUrl(url){
+  return new Promise((resolve, reject) => {
+    if(!url){ reject(new Error('No image URL')); return; }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    const timeout = setTimeout(() => reject(new Error('Timed out')), 12000);
+    img.onload = () => {
+      clearTimeout(timeout);
+      try{
+        let w = img.width, h = img.height;
+        const maxDim = 1080;
+        if(w >= h && w > maxDim){ h = Math.round(h * maxDim / w); w = maxDim; }
+        else if(h > w && h > maxDim){ w = Math.round(w * maxDim / h); h = maxDim; }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        const dataUrl = c.toDataURL('image/jpeg', 0.85); // throws if canvas is tainted
+        resolve(dataUrl);
+      }catch(e){
+        reject(e); // tainted canvas (source blocks CORS reuse)
+      }
+    };
+    img.onerror = () => { clearTimeout(timeout); reject(new Error('Image failed to load')); };
+    img.src = url;
+  });
+}
+
+function compressImage(file, maxDim, quality){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if(w >= h && w > maxDim){ h = Math.round(h * maxDim / w); w = maxDim; }
+        else if(h > w && h > maxDim){ w = Math.round(w * maxDim / h); h = maxDim; }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => reject(new Error('Image load failed'));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error('File read failed'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function wrapAndDrawHeadline(ctx, text, highlightWords, x, y, maxWidth, lineHeight){
+  const words = (text || '').split(/\s+/).filter(Boolean);
+  const highlightSet = new Set((highlightWords || []).map(w => w.toLowerCase()));
+  let cx = x, cy = y;
+  words.forEach(word => {
+    const clean = word.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
+    const wWidth = ctx.measureText(word + ' ').width;
+    if(cx + wWidth > x + maxWidth){
+      cx = x; cy += lineHeight;
+    }
+    ctx.fillStyle = highlightSet.has(clean) ? '#c9885a' : '#f4f7f5';
+    ctx.fillText(word, cx, cy);
+    cx += wWidth;
+  });
+}
+
+async function drawGraphic(d){
+  const canvas = document.getElementById(`canvas-${d.id}`);
+  if(!canvas || !d.imageData) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const imgAreaH = Math.round(H * 0.64);
+
+  try{
+    await Promise.all([
+      document.fonts.load('800 56px Sora'),
+      document.fonts.load('600 30px "IBM Plex Mono"')
+    ]);
+  }catch(e){ /* fonts may already be loaded */ }
+
+  const img = new Image();
+  img.onload = () => {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#111814';
+    ctx.fillRect(0, 0, W, H);
+
+    const scale = Math.max(W / img.width, imgAreaH / img.height);
+    const iw = img.width * scale, ih = img.height * scale;
+    const ix = (W - iw) / 2, iy = (imgAreaH - ih) / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, W, imgAreaH);
+    ctx.clip();
+    ctx.drawImage(img, ix, iy, iw, ih);
+    ctx.restore();
+
+    const grad = ctx.createLinearGradient(0, imgAreaH - 160, 0, imgAreaH);
+    grad.addColorStop(0, 'rgba(17,24,20,0)');
+    grad.addColorStop(1, 'rgba(17,24,20,0.95)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, imgAreaH - 160, W, 160);
+
+    const pillText = '@tammypadal';
+    ctx.font = '600 30px "IBM Plex Mono", monospace';
+    const pillPadX = 28, pillH = 58;
+    const pillW = ctx.measureText(pillText).width + pillPadX * 2;
+    const pillX = 60, pillY = imgAreaH - pillH / 2;
+    roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+    ctx.fillStyle = '#f4f7f5';
+    ctx.fill();
+    ctx.fillStyle = '#0a0f0d';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(pillText, pillX + pillPadX, pillY + pillH / 2 + 2);
+    ctx.textBaseline = 'alphabetic';
+
+    ctx.font = '800 56px Sora, sans-serif';
+    wrapAndDrawHeadline(ctx, d.headline, d.highlight_words, 60, imgAreaH + 100, W - 120, 68);
+  };
+  img.onerror = () => setStatus('Could not render that photo.', true);
+  img.src = d.imageData;
+}
+
+tabs.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-filter]');
+  if(!btn) return;
+  currentFilter = btn.dataset.filter;
+  [...tabs.children].forEach(b => b.classList.toggle('active', b === btn));
+  render();
+});
+
+async function generateDrafts(){
+  genBtn.disabled = true;
+  genLabel.innerHTML = '<span class="spinner"></span> Searching for news…';
+  setStatus('Fetching recent PC hardware/component news…');
+
+  const sourceConstraint = sources.length > 0
+    ? `Only use these sources — search site-by-site if needed, and skip any story you can't attribute to one of them: ${sources.join(', ')}. Do not use any other outlet.`
+    : `Search broadly across reputable tech hardware outlets.`;
+
+  const systemPrompt = `You are a social media content assistant for a Facebook Page called "${PAGE_NAME}", run by a Filipino tech enthusiast and PC repair technician. Find 4 to 6 genuinely recent (last 3-5 days) news items about PC hardware and components: GPUs, CPUs, motherboards, storage, RAM, PSUs, cooling, cases, or peripherals. Prioritize stories relevant to builders and buyers (new releases, price changes, restocks, benchmarks, notable recalls/bugs).
+
+${sourceConstraint}
+
+For each item write a ready-to-post Facebook caption in natural Taglish (mixing Tagalog and English the way a Filipino tech creator actually talks). Follow these rules strictly:
+- FIRST LINE must be a punchy hook: a reaction, a bold claim, or a question — never start with "AMD unveils..." or a dry news-report opener. Something like a real person's gut reaction seeing the news.
+- Write in first person with genuine personal opinion/reaction sprinkled in (e.g. "sobrang gulat ako dito", "okay 'to for real", "medyo overpriced pero ganda ng design") — not neutral wire-copy tone.
+- Keep it SHORT and punchy: 35-70 words total, not a full explainer. Cut anything that doesn't add flavor or a key fact.
+- End with 3-5 relevant hashtags.
+- Avoid corporate/stiff phrasing entirely.
+
+Respond with ONLY a raw JSON array (no markdown fences, no commentary) where each item has exactly these fields:
+[{"headline": "...", "source": "publication name", "url": "article url", "image_url": "direct URL to the article's main/hero image if you can identify one, otherwise empty string", "category": "GPU|CPU|Storage|Motherboard|Peripherals|Cooling|PSU|General", "caption": "the facebook caption text", "highlight_words": ["1-3 key words or short product names from the headline to visually emphasize, e.g. product names, brand names, or standout numbers"]}]`;
+
+  try{
+    // Point this to your deployed Cloudflare Worker URL
+    const PROXY_URL = "https://tammy-tech-news-proxy.YOUR_SUBDOMAIN.workers.dev";
+    const API_HEADERS = {
+      "Content-Type": "application/json"
+      // No API key here — the Worker adds it server-side from the secret
+    };
+
+    // Agentic loop: keep sending messages until we get a final text response
+    // (the model may do multiple web_search rounds before writing the JSON)
+    const messages = [
+      { role: "user", content: "Find today's PC hardware/component news and write the Facebook caption drafts as specified." }
+    ];
+
+    let text = '';
+    let iterations = 0;
+    const MAX_ITER = 8;
+
+    while(iterations < MAX_ITER){
+      iterations++;
+      const statusMessages = [
+        'Searching recent hardware news…',
+        'Reading articles…',
+        'Gathering more sources…',
+        'Cross-checking stories…',
+        'Writing captions…',
+        'Finishing up…'
+      ];
+      setStatus(statusMessages[Math.min(iterations - 1, statusMessages.length - 1)]);
+
+      const response = await fetch(PROXY_URL, {
+        method: "POST",
+        headers: API_HEADERS,
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 4096,
+          system: systemPrompt,
+          messages,
+          tools: [{ type: "web_search_20250305", name: "web_search" }]
+        })
+      });
+
+      if(!response.ok){
+        let detail = '';
+        try{ detail = (await response.json()).error?.message || ''; }catch(e){}
+        throw new Error(`API error ${response.status}${detail ? ': ' + detail : ''}`);
+      }
+
+      const data = await response.json();
+
+      // Collect any text from this turn
+      const turnText = (data.content || [])
+        .filter(b => b.type === 'text')
+        .map(b => b.text)
+        .join('\n');
+      if(turnText.trim()) text += turnText;
+
+      // If stop_reason is 'end_turn' or there are no tool_use blocks, we're done
+      const toolUseBlocks = (data.content || []).filter(b => b.type === 'tool_use');
+      if(data.stop_reason === 'end_turn' || toolUseBlocks.length === 0) break;
+
+      // Push assistant turn + tool results back into messages to continue the loop
+      messages.push({ role: "assistant", content: data.content });
+      const toolResults = toolUseBlocks.map(block => ({
+        type: "tool_result",
+        tool_use_id: block.id,
+        content: block.type === 'tool_use' ? (block.output || '') : ''
+      }));
+      messages.push({ role: "user", content: toolResults });
+    }
+
+    if(!text.trim()){
+      throw new Error('Model returned no text after searching. Please try again.');
+    }
+
+    const cleaned = text.replace(/```json|```/g, '').trim();
+    const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
+    if(!jsonMatch) throw new Error('Response did not contain valid JSON — it may have been cut off.');
+
+    let items;
+    try{
+      items = JSON.parse(jsonMatch[0]);
+    }catch(parseErr){
+      throw new Error('Could not parse the response JSON (likely truncated). Try again.');
+    }
+    if(!Array.isArray(items) || items.length === 0) throw new Error('No news items came back — try again or widen your sources list.');
+
+    const now = Date.now();
+    const newDrafts = items.map((it, i) => ({
+      id: `d_${now}_${i}`,
+      headline: it.headline || 'Untitled',
+      source: it.source || '',
+      url: it.url || '',
+      category: it.category || 'General',
+      caption: it.caption || '',
+      highlight_words: Array.isArray(it.highlight_words) ? it.highlight_words : [],
+      imageUrl: it.image_url || '',
+      imageData: null,
+      status: 'draft',
+      createdAt: now
+    }));
+
+    drafts = [...newDrafts, ...drafts];
+    await saveDrafts();
+    currentFilter = 'all';
+    [...tabs.children].forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
+    render();
+    setStatus(`Added ${newDrafts.length} new draft${newDrafts.length === 1 ? '' : 's'}.`);
+
+  }catch(err){
+    console.error(err);
+    setStatus(`Could not generate drafts: ${err.message || 'unknown error'}`, true);
+  }finally{
+    genBtn.disabled = false;
+    genLabel.textContent = '⚡ Generate drafts';
+  }
+}
+
+genBtn.addEventListener('click', generateDrafts);
+
+loadDrafts();
+loadSources();
+</script>
+
+</body>
+</html>
