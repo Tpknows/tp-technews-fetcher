@@ -579,16 +579,14 @@ function render(){
         <div class="graphic-block">
           <span class="graphic-label">Post graphic</span>
           <div class="graphic-canvas-wrap" id="canvasWrap-${d.id}">
-            ${d.imageData
-              ? `<canvas id="canvas-${d.id}" width="1080" height="1080"></canvas>`
-              : `<div class="graphic-empty">Upload a photo to build the graphic</div>`}
+            <canvas id="canvas-${d.id}" width="1080" height="1080"></canvas>
           </div>
           <div class="graphic-controls">
-            <label class="file-btn">📷 ${d.imageData ? 'Replace photo' : 'Upload photo'}
+            <label class="file-btn">📷 ${d.imageData ? 'Replace with real photo' : 'Use a real photo instead'}
               <input type="file" accept="image/*" class="photo-input" data-id="${d.id}">
             </label>
             ${(!d.imageData && d.imageUrl) ? `<button class="mini-btn fetch-photo" data-action="fetch-photo" data-id="${d.id}">🔗 Try fetch from article</button>` : ''}
-            ${d.imageData ? `<button class="mini-btn download" data-action="download" data-id="${d.id}">Download PNG</button>` : ''}
+            <button class="mini-btn download" data-action="download" data-id="${d.id}">Download PNG</button>
           </div>
         </div>
         <div class="card-actions">
@@ -601,9 +599,7 @@ function render(){
     </div>
   `).join('');
 
-  list.forEach(d => {
-    if(d.imageData){ drawGraphic(d); }
-  });
+  list.forEach(d => { drawGraphic(d); });
 }
 
 feed.addEventListener('input', (e) => {
@@ -671,7 +667,7 @@ feed.addEventListener('click', async (e) => {
       setStatus('');
     }catch(err){
       console.warn(err);
-      setStatus('That site blocks reuse of its image — upload the photo manually instead.', true);
+      setStatus('That site blocks reuse of its image — keeping the auto category graphic instead. Upload your own photo if you want to replace it.', true);
       btn.disabled = false;
     }
   } else if(action === 'approve'){
@@ -849,10 +845,81 @@ function drawWrappedHighlighted(ctx, text, highlightWords, x, y, maxWidth, lineH
   return cy; // return last y used
 }
 
+const CATEGORY_STYLES = {
+  GPU: { color: '#4ade80', label: 'GPU' },
+  CPU: { color: '#e0b04a', label: 'CPU' },
+  Storage: { color: '#5aa9e0', label: 'SSD' },
+  Motherboard: { color: '#c9885a', label: 'MOBO' },
+  Peripherals: { color: '#8fa89a', label: 'I/O' },
+  Cooling: { color: '#4ac9e0', label: 'FAN' },
+  PSU: { color: '#e0685a', label: 'PSU' },
+  General: { color: '#4ade80', label: 'TECH' }
+};
+function getCategoryStyle(category){
+  return CATEGORY_STYLES[category] || CATEGORY_STYLES.General;
+}
+
+// Procedurally generated background used whenever there's no real photo
+// (fetch blocked, not uploaded yet) — a category-tinted circuit pattern
+// plus a badge, so every draft still gets a distinct, on-brand graphic
+// instead of an empty box. 100% drawn with canvas primitives, no external
+// images, so there's no copyright concern.
+function drawCategoryBackground(ctx, W, imgAreaH, category){
+  const style = getCategoryStyle(category);
+
+  const grad = ctx.createLinearGradient(0, 0, 0, imgAreaH);
+  grad.addColorStop(0, '#0f1613');
+  grad.addColorStop(1, '#0a0f0d');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, imgAreaH);
+
+  // diagonal circuit-style line pattern, tinted with the category color
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, W, imgAreaH);
+  ctx.clip();
+  ctx.strokeStyle = style.color;
+  ctx.globalAlpha = 0.16;
+  ctx.lineWidth = 2;
+  const step = 64;
+  for(let x = -imgAreaH; x < W + imgAreaH; x += step){
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + imgAreaH, imgAreaH);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // center badge: ring + category label
+  const cx = W / 2, cy = imgAreaH / 2;
+  const r = Math.min(W, imgAreaH) * 0.22;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = style.color;
+  ctx.globalAlpha = 0.7;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  ctx.save();
+  ctx.font = `800 60px "IBM Plex Mono", monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = style.color;
+  ctx.fillText(style.label, cx, cy);
+  ctx.restore();
+}
+
 function drawGraphic(d){
   return new Promise((resolve) => {
     const canvas = document.getElementById(`canvas-${d.id}`);
-    if(!canvas || !d.imageData){ resolve(false); return; }
+    if(!canvas){ resolve(false); return; }
     const ctx = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height; // 1080 x 1080
 
@@ -862,92 +929,109 @@ function drawGraphic(d){
       document.fonts.load('400 30px Sora'),
       document.fonts.load('600 26px "IBM Plex Mono"')
     ]).catch(() => {}).then(() => {
-      const img = new Image();
-      img.onload = () => {
-    ctx.clearRect(0, 0, W, H);
 
-    // ── Layout constants ──────────────────────────────────
-    const PAD = 56;
-    const HEADLINE_SIZE = 48;
-    const CAPTION_SIZE = 30;
-    const HANDLE_SIZE = 26;
-    const LINE_H_HEAD = 62;
-    const LINE_H_CAP = 44;
-    const STRIP_GAP = 36;   // gap between photo and strip
-    const INNER_PAD_TOP = 40;
-    const INNER_PAD_BOT = 44;
+      const finishDraw = (photoImg) => {
+        ctx.clearRect(0, 0, W, H);
 
-    // Pre-measure text heights to size the strip
-    ctx.font = `800 ${HEADLINE_SIZE}px Sora, sans-serif`;
-    const headLines = measureWrappedLines(ctx, d.headline, W - PAD * 2);
-    const headH = headLines.length * LINE_H_HEAD;
+        // ── Layout constants ──────────────────────────────────
+        const PAD = 56;
+        const HEADLINE_SIZE = 48;
+        const CAPTION_SIZE = 30;
+        const HANDLE_SIZE = 26;
+        const LINE_H_HEAD = 62;
+        const LINE_H_CAP = 44;
+        const STRIP_GAP = 36;   // gap between photo and strip
+        const INNER_PAD_TOP = 40;
+        const INNER_PAD_BOT = 44;
 
-    ctx.font = `400 ${CAPTION_SIZE}px Sora, sans-serif`;
-    const capLines = measureWrappedLines(ctx, d.graphicCaption != null ? d.graphicCaption : d.caption, W - PAD * 2);
-    const capH = capLines.length * LINE_H_CAP;
+        // Pre-measure text heights to size the strip
+        ctx.font = `800 ${HEADLINE_SIZE}px Sora, sans-serif`;
+        const headLines = measureWrappedLines(ctx, d.headline, W - PAD * 2);
+        const headH = headLines.length * LINE_H_HEAD;
 
-    ctx.font = `600 ${HANDLE_SIZE}px "IBM Plex Mono", monospace`;
-    const handleH = HANDLE_SIZE + 8;
+        ctx.font = `400 ${CAPTION_SIZE}px Sora, sans-serif`;
+        const capLines = measureWrappedLines(ctx, d.graphicCaption != null ? d.graphicCaption : d.caption, W - PAD * 2);
+        const capH = capLines.length * LINE_H_CAP;
 
-    const stripH = INNER_PAD_TOP + headH + 20 + capH + 20 + handleH + INNER_PAD_BOT;
-    const imgAreaH = H - STRIP_GAP - stripH;
+        ctx.font = `600 ${HANDLE_SIZE}px "IBM Plex Mono", monospace`;
+        const handleH = HANDLE_SIZE + 16 + 24; // pill height + gap before headline (now sits at the top of the strip)
 
-    // ── Draw photo (top, cover-fit) ───────────────────────
-    ctx.fillStyle = '#0a0f0d';
-    ctx.fillRect(0, 0, W, H);
+        const stripH = INNER_PAD_TOP + handleH + headH + 20 + capH + INNER_PAD_BOT;
+        const imgAreaH = H - STRIP_GAP - stripH;
 
-    const scale = Math.max(W / img.width, imgAreaH / img.height);
-    const iw = img.width * scale, ih = img.height * scale;
-    const ix = (W - iw) / 2, iy = (imgAreaH - ih) / 2;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, W, imgAreaH);
-    ctx.clip();
-    ctx.drawImage(img, ix, iy, iw, ih);
-    ctx.restore();
+        ctx.fillStyle = '#0a0f0d';
+        ctx.fillRect(0, 0, W, H);
 
-    // Soft gradient at bottom of photo blending into strip
-    const grad = ctx.createLinearGradient(0, imgAreaH - 80, 0, imgAreaH + STRIP_GAP);
-    grad.addColorStop(0, 'rgba(10,15,13,0)');
-    grad.addColorStop(1, 'rgba(10,15,13,1)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, imgAreaH - 80, W, 80 + STRIP_GAP);
+        if(photoImg){
+          // ── Draw real photo (top, cover-fit) ─────────────────
+          const scale = Math.max(W / photoImg.width, imgAreaH / photoImg.height);
+          const iw = photoImg.width * scale, ih = photoImg.height * scale;
+          const ix = (W - iw) / 2, iy = (imgAreaH - ih) / 2;
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(0, 0, W, imgAreaH);
+          ctx.clip();
+          ctx.drawImage(photoImg, ix, iy, iw, ih);
+          ctx.restore();
+        } else {
+          // ── No photo available — auto category background ───
+          drawCategoryBackground(ctx, W, imgAreaH, d.category);
+        }
 
-    // ── Dark strip below photo ─────────────────────────────
-    const stripY = imgAreaH + STRIP_GAP;
-    ctx.fillStyle = '#0a0f0d';
-    ctx.fillRect(0, stripY, W, H - stripY);
+        // Soft gradient at bottom blending into strip
+        const grad = ctx.createLinearGradient(0, imgAreaH - 80, 0, imgAreaH + STRIP_GAP);
+        grad.addColorStop(0, 'rgba(10,15,13,0)');
+        grad.addColorStop(1, 'rgba(10,15,13,1)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, imgAreaH - 80, W, 80 + STRIP_GAP);
 
-    // thin green accent line at top of strip
-    ctx.fillStyle = '#4ade80';
-    ctx.fillRect(PAD, stripY, W - PAD * 2, 3);
+        // ── Dark strip below photo ─────────────────────────────
+        const stripY = imgAreaH + STRIP_GAP;
+        ctx.fillStyle = '#0a0f0d';
+        ctx.fillRect(0, stripY, W, H - stripY);
 
-    // ── Headline (with highlighted keywords in amber) ──────
-    let ty = stripY + INNER_PAD_TOP + HEADLINE_SIZE;
-    ctx.font = `800 ${HEADLINE_SIZE}px Sora, sans-serif`;
-    ctx.textBaseline = 'alphabetic';
-    drawWrappedHighlighted(ctx, d.headline, d.highlight_words, PAD, ty, W - PAD * 2, LINE_H_HEAD, '#f4f7f5', '#e0b04a');
-    ty += headH + 20;
+        // thin green accent line at top of strip
+        ctx.fillStyle = '#4ade80';
+        ctx.fillRect(PAD, stripY, W - PAD * 2, 3);
 
-    // ── Caption text (highlighted keywords in green) ───────
-    ctx.font = `400 ${CAPTION_SIZE}px Sora, sans-serif`;
-    drawWrappedHighlighted(ctx, d.graphicCaption != null ? d.graphicCaption : d.caption, d.highlight_words, PAD, ty, W - PAD * 2, LINE_H_CAP, '#b8c9be', '#4ade80');
-    ty += capH + 20;
+        // ── @handle pill (moved to top, right under the accent line) ──
+        ctx.font = `600 ${HANDLE_SIZE}px "IBM Plex Mono", monospace`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+        const handle = PAGE_NAME ? `@${PAGE_NAME.toLowerCase().replace(/\s+/g,'')}` : '@tpknows';
+        const pW = ctx.measureText(handle).width + 32;
+        const pH = HANDLE_SIZE + 16;
+        const pillTopY = stripY + INNER_PAD_TOP;
+        const pillTextY = pillTopY + pH / 2 + HANDLE_SIZE * 0.35;
+        roundRect(ctx, PAD, pillTopY, pW, pH, pH / 2);
+        ctx.fillStyle = '#1e2b25';
+        ctx.fill();
+        ctx.fillStyle = '#4ade80';
+        ctx.fillText(handle, PAD + 16, pillTextY);
 
-    // ── @handle pill ───────────────────────────────────────
-    ctx.font = `600 ${HANDLE_SIZE}px "IBM Plex Mono", monospace`;
-    const handle = PAGE_NAME ? `@${PAGE_NAME.toLowerCase().replace(/\s+/g,'')}` : '@tpknows';
-    const pW = ctx.measureText(handle).width + 32;
-    const pH = HANDLE_SIZE + 16;
-    roundRect(ctx, PAD, ty - HANDLE_SIZE, pW, pH, pH / 2);
-    ctx.fillStyle = '#1e2b25';
-    ctx.fill();
-    ctx.fillStyle = '#4ade80';
-    ctx.fillText(handle, PAD + 16, ty);
+        // ── Headline (with highlighted keywords in amber) ──────
+        let ty = pillTopY + pH + 24 + HEADLINE_SIZE;
+        ctx.font = `800 ${HEADLINE_SIZE}px Sora, sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+        drawWrappedHighlighted(ctx, d.headline, d.highlight_words, PAD, ty, W - PAD * 2, LINE_H_HEAD, '#f4f7f5', '#e0b04a');
+        ty += headH + 20;
+
+        // ── Caption text (highlighted keywords in green) ───────
+        ctx.font = `400 ${CAPTION_SIZE}px Sora, sans-serif`;
+        drawWrappedHighlighted(ctx, d.graphicCaption != null ? d.graphicCaption : d.caption, d.highlight_words, PAD, ty, W - PAD * 2, LINE_H_CAP, '#b8c9be', '#4ade80');
+
         resolve(true);
       };
-      img.onerror = () => { setStatus('Could not render that photo.', true); resolve(false); };
-      img.src = d.imageData;
+
+      if(d.imageData){
+        const img = new Image();
+        img.onload = () => finishDraw(img);
+        img.onerror = () => { setStatus('Could not render that photo — using category background instead.', true); finishDraw(null); };
+        img.src = d.imageData;
+      } else {
+        finishDraw(null);
+      }
     });
   });
 }
