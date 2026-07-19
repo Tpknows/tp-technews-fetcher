@@ -407,8 +407,10 @@ let sources = [];
 let history_sessions = []; // [{date, label, drafts:[]}]
 
 // ── Google Sheets sync ───────────────────────────────────────
-// Paste your Apps Script Web App URL here after deploying
-let SHEETS_URL = localStorage.getItem('sheets_url') || '';
+// Default Apps Script Web App URL (TECH FETCHER sheet). Can still be
+// overridden via the Sheets URL input, which takes priority if set.
+const DEFAULT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycby4zeSmnov2X0xggPf2SvxGxovSR29WMKs0phK4ciWVyTS2jl3Ls87kDKQF054jrrHD9Q/exec';
+let SHEETS_URL = localStorage.getItem('sheets_url') || DEFAULT_SHEETS_URL;
 
 async function sheetsGet(action) {
   if (!SHEETS_URL) return null;
@@ -475,6 +477,18 @@ async function loadDrafts(){
 }
 
 async function loadSources(){
+  // Try Google Sheets first (cross-device), fallback to localStorage/defaults
+  if(SHEETS_URL){
+    try{
+      const data = await sheetsGet('getSources');
+      if(data && data.sources && data.sources.length){
+        sources = data.sources;
+        localStorage.setItem('sources', JSON.stringify(sources));
+        renderSources();
+        return;
+      }
+    }catch(e){ console.warn('Sheets sources load failed, using local', e); }
+  }
   try{
     const res = localStorage.getItem('sources');
     sources = res ? JSON.parse(res) : [...DEFAULT_SOURCES];
@@ -489,6 +503,9 @@ async function saveSources(){
     localStorage.setItem('sources', JSON.stringify(sources));
   }catch(e){
     setStatus('Could not save sources list.', true);
+  }
+  if(SHEETS_URL){
+    sheetsPost({ action: 'saveSources', sources }).catch(e => console.warn('Sheets sources save failed', e));
   }
 }
 
