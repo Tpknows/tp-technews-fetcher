@@ -353,6 +353,9 @@
     <button class="btn-primary" id="genBtn">
       <span id="genLabel">⚡ Generate drafts</span>
     </button>
+    <button class="btn-ghost" id="syncBtn" title="Push all current drafts to the connected Google Sheet">
+      <span id="syncLabel">📤 Sync to Sheet</span>
+    </button>
     <div class="tabs" id="tabs">
       <button class="btn-ghost active" data-filter="all">All</button>
       <button class="btn-ghost" data-filter="draft">Draft</button>
@@ -407,6 +410,8 @@ const sourcesPanel = document.getElementById('sourcesPanel');
 const feed = document.getElementById('feed');
 const genBtn = document.getElementById('genBtn');
 const genLabel = document.getElementById('genLabel');
+const syncBtn = document.getElementById('syncBtn');
+const syncLabel = document.getElementById('syncLabel');
 const statusLine = document.getElementById('statusLine');
 const tabs = document.getElementById('tabs');
 
@@ -485,7 +490,61 @@ async function saveDrafts(){
   }catch(e){
     setStatus('Could not save — your last change may not persist.', true);
   }
+  scheduleSheetSync();
 }
+
+// ── Google Sheets sync ─────────────────────────────────────────
+// Web App deployed from the Apps Script bound to the "TECH FETCHER"
+// Google Sheet. Pushes the full current drafts array on every change
+// (debounced) so the Sheet always mirrors the app — including the
+// Approved tag/checkbox, which flips based on each draft's status.
+const SHEETS_SYNC_URL = "https://script.google.com/macros/s/AKfycby4zeSmnov2X0xggPf2SvxGxovSR29WMKs0phK4ciWVyTS2jl3Ls87kDKQF054jrrHD9Q/exec";
+
+let sheetSyncTimer = null;
+const SHEET_SYNC_DEBOUNCE_MS = 3000;
+
+// Called after every saveDrafts() — e.g. a keystroke in a caption
+// textarea. Debounced so rapid edits collapse into one sync a few
+// seconds after the user stops typing, instead of one request per
+// keystroke.
+function scheduleSheetSync(){
+  if(!SHEETS_SYNC_URL) return;
+  clearTimeout(sheetSyncTimer);
+  sheetSyncTimer = setTimeout(() => { syncToSheet(false); }, SHEET_SYNC_DEBOUNCE_MS);
+}
+
+async function syncToSheet(manual){
+  if(!SHEETS_SYNC_URL){
+    if(manual) setStatus('No Google Sheet connected yet.', true);
+    return;
+  }
+  if(manual){
+    syncBtn.disabled = true;
+    syncLabel.innerHTML = '<span class="spinner spinner-dark"></span> Syncing…';
+  }
+  try{
+    // text/plain avoids a CORS preflight (OPTIONS) request, which Apps
+    // Script web apps don't handle — the server still reads it as JSON.
+    const res = await fetch(SHEETS_SYNC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'sync', drafts })
+    });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || 'Sync failed');
+    if(manual) setStatus(`Synced ${data.count} draft${data.count === 1 ? '' : 's'} to Google Sheet.`);
+  }catch(err){
+    console.error('Sheet sync failed:', err);
+    if(manual) setStatus(`Could not sync to Google Sheet: ${err.message || 'unknown error'}`, true);
+  }finally{
+    if(manual){
+      syncBtn.disabled = false;
+      syncLabel.textContent = '📤 Sync to Sheet';
+    }
+  }
+}
+
+syncBtn.addEventListener('click', () => syncToSheet(true));
 
 async function loadHistory(){
   try{
