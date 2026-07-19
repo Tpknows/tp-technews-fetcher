@@ -681,6 +681,10 @@ feed.addEventListener('change', async (e) => {
   }
 });
 
+// Cloudflare Worker proxy — used both for the Gemini API call and for
+// pulling article hero images (bypasses CORS on hotlinked images)
+const PROXY_URL = "https://tp-technews-fetcher.tammy-padal.workers.dev";
+
 function fetchImageAsDataUrl(url){
   return new Promise((resolve, reject) => {
     if(!url){ reject(new Error('No image URL')); return; }
@@ -707,6 +711,34 @@ function fetchImageAsDataUrl(url){
     img.onerror = () => { clearTimeout(timeout); reject(new Error('Image failed to load')); };
     img.src = proxied;
   });
+}
+
+// Automatically tries to pull the article's hero photo for every new draft,
+// one at a time (kinder to the proxy than firing them all in parallel).
+// Silent per-draft failures — those cards just fall back to the manual
+// "Try fetch from article" / "Upload photo" buttons.
+async function autoFetchPhotos(newDrafts){
+  const candidates = newDrafts.filter(d => d.imageUrl);
+  if(!candidates.length) return;
+  let done = 0;
+  setStatus(`Auto-fetching photos… (0/${candidates.length})`);
+  for(const d of candidates){
+    try{
+      const dataUrl = await fetchImageAsDataUrl(d.imageUrl);
+      // Draft may have been deleted while we were fetching — guard against that
+      const live = drafts.find(x => x.id === d.id);
+      if(live){
+        live.imageData = dataUrl;
+        await saveDrafts();
+        render();
+      }
+    }catch(err){
+      console.warn('Auto-fetch failed for', d.headline, err);
+    }
+    done++;
+    setStatus(`Auto-fetching photos… (${done}/${candidates.length})`);
+  }
+  setStatus('');
 }
 
 function compressImage(file, maxDim, quality){
@@ -938,9 +970,6 @@ Respond with ONLY a raw JSON array (no markdown fences, no commentary) where eac
 [{"headline": "...", "source": "publication name", "url": "article url", "image_url": "direct URL to the article's main/hero image if you can identify one, otherwise empty string", "category": "GPU|CPU|Storage|Motherboard|Peripherals|Cooling|PSU|General", "caption": "the facebook caption text", "highlight_words": ["1-3 key words or short product names from the headline to visually emphasize, e.g. product names, brand names, or standout numbers"]}]`;
 
   try{
-    // Point this to your deployed Cloudflare Worker URL
-    const PROXY_URL = "https://tp-technews-fetcher.tammy-padal.workers.dev";
-
     setStatus('Searching recent hardware news…');
 
     const response = await fetch(PROXY_URL, {
@@ -1008,6 +1037,7 @@ Respond with ONLY a raw JSON array (no markdown fences, no commentary) where eac
     currentFilter = 'all';
     [...tabs.children].forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
     render();
+    autoFetchPhotos(newDrafts); // background, non-blocking — fills in imageData as each resolves
     setStatus(`Added ${newDrafts.length} new draft${newDrafts.length === 1 ? '' : 's'}.`);
 
   }catch(err){
