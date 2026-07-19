@@ -304,13 +304,6 @@
 </header>
 
 <main>
-  <div class="handle-bar" id="sheetsBar">
-    <label for="sheetsInput">📊 Google Sheet:</label>
-    <input type="text" id="sheetsInput" placeholder="Paste your Apps Script Web App URL here…" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:7px 12px;font-size:13px;color:var(--text);outline:none;">
-    <button class="btn-save-handle" id="saveSheetBtn">Connect</button>
-    <span class="handle-saved" id="sheetSaved">✓ Connected</span>
-  </div>
-
   <div class="handle-bar">
     <label for="handleInput">🏷️ Page handle:</label>
     <div class="handle-input-wrap">
@@ -365,33 +358,6 @@ let PAGE_NAME = "tpknows";
   if(inp) inp.value = PAGE_NAME;
 })();
 
-// Init Sheets URL input
-(()=>{
-  const inp = document.getElementById('sheetsInput');
-  if(inp && SHEETS_URL) inp.value = SHEETS_URL;
-})();
-
-document.getElementById('saveSheetBtn').addEventListener('click', async () => {
-  const val = document.getElementById('sheetsInput').value.trim();
-  if(!val) return;
-  SHEETS_URL = val;
-  localStorage.setItem('sheets_url', val);
-  const saved = document.getElementById('sheetSaved');
-  saved.classList.add('show');
-  setTimeout(() => saved.classList.remove('show'), 2500);
-  // Pull drafts from Sheets immediately
-  setStatus('Connecting to Google Sheet…');
-  const data = await sheetsGet('getDrafts');
-  if(data && data.drafts && data.drafts.length) {
-    drafts = data.drafts;
-    localStorage.setItem('drafts', JSON.stringify(drafts));
-    render();
-    setStatus(`Loaded ${data.drafts.length} drafts from Google Sheet.`);
-  } else {
-    setStatus('Connected! Generate drafts to start syncing.');
-  }
-});
-
 document.getElementById('saveHandleBtn').addEventListener('click', async () => {
   const val = document.getElementById('handleInput').value.trim().replace(/^@+/, '');
   if(!val) return;
@@ -406,31 +372,6 @@ let currentFilter = 'all';
 let sources = [];
 let history_sessions = []; // [{date, label, drafts:[]}]
 
-// ── Google Sheets sync ───────────────────────────────────────
-// Default Apps Script Web App URL (TECH FETCHER sheet). Can still be
-// overridden via the Sheets URL input, which takes priority if set.
-const DEFAULT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycby4zeSmnov2X0xggPf2SvxGxovSR29WMKs0phK4ciWVyTS2jl3Ls87kDKQF054jrrHD9Q/exec';
-let SHEETS_URL = localStorage.getItem('sheets_url') || DEFAULT_SHEETS_URL;
-
-async function sheetsGet(action) {
-  if (!SHEETS_URL) return null;
-  try {
-    const res = await fetch(`${SHEETS_URL}?action=${action}`);
-    return await res.json();
-  } catch(e) { console.warn('Sheets GET failed', e); return null; }
-}
-
-async function sheetsPost(body) {
-  if (!SHEETS_URL) return null;
-  try {
-    const res = await fetch(SHEETS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    return await res.json();
-  } catch(e) { console.warn('Sheets POST failed', e); return null; }
-}
 const DEFAULT_SOURCES = [
   "Tom's Hardware", "Videocardz", "TechPowerUp", "Wccftech", "Notebookcheck", "YugaTech"
 ];
@@ -455,20 +396,6 @@ function setStatus(msg, isError=false){
 }
 
 async function loadDrafts(){
-  // Try Google Sheets first (cross-device), fallback to localStorage
-  if(SHEETS_URL){
-    try{
-      setStatus('Loading from Google Sheet…');
-      const data = await sheetsGet('getDrafts');
-      if(data && data.drafts){
-        drafts = data.drafts;
-        localStorage.setItem('drafts', JSON.stringify(drafts));
-        render();
-        setStatus('');
-        return;
-      }
-    }catch(e){ console.warn('Sheets load failed, using local', e); }
-  }
   try{
     const res = localStorage.getItem('drafts');
     drafts = res ? JSON.parse(res) : [];
@@ -477,18 +404,6 @@ async function loadDrafts(){
 }
 
 async function loadSources(){
-  // Try Google Sheets first (cross-device), fallback to localStorage/defaults
-  if(SHEETS_URL){
-    try{
-      const data = await sheetsGet('getSources');
-      if(data && data.sources && data.sources.length){
-        sources = data.sources;
-        localStorage.setItem('sources', JSON.stringify(sources));
-        renderSources();
-        return;
-      }
-    }catch(e){ console.warn('Sheets sources load failed, using local', e); }
-  }
   try{
     const res = localStorage.getItem('sources');
     sources = res ? JSON.parse(res) : [...DEFAULT_SOURCES];
@@ -503,9 +418,6 @@ async function saveSources(){
     localStorage.setItem('sources', JSON.stringify(sources));
   }catch(e){
     setStatus('Could not save sources list.', true);
-  }
-  if(SHEETS_URL){
-    sheetsPost({ action: 'saveSources', sources }).catch(e => console.warn('Sheets sources save failed', e));
   }
 }
 
@@ -553,27 +465,9 @@ async function saveDrafts(){
   }catch(e){
     setStatus('Could not save — your last change may not persist.', true);
   }
-  // Sync to Google Sheets in background (don't await — non-blocking)
-  if(SHEETS_URL){
-    sheetsPost({ action: 'saveDrafts', drafts: drafts.map(d => ({
-      id: d.id, headline: d.headline, source: d.source, url: d.url,
-      category: d.category, caption: d.caption, imageUrl: d.imageUrl || '',
-      status: d.status, createdAt: d.createdAt
-    })) }).catch(e => console.warn('Sheets sync failed', e));
-  }
 }
 
 async function loadHistory(){
-  if(SHEETS_URL){
-    try{
-      const data = await sheetsGet('getHistory');
-      if(data && data.sessions){
-        history_sessions = data.sessions;
-        localStorage.setItem('history_sessions', JSON.stringify(history_sessions));
-        return;
-      }
-    }catch(e){ console.warn('Sheets history load failed', e); }
-  }
   try{
     const res = localStorage.getItem('history_sessions');
     history_sessions = res ? JSON.parse(res) : [];
@@ -608,10 +502,6 @@ async function addToHistory(newDrafts){
   const session = { sessionId: `s_${now.getTime()}`, date: now.toISOString(), label, drafts: lightDrafts };
   history_sessions.unshift(session);
   await saveHistory();
-  // Sync to Google Sheets in background
-  if(SHEETS_URL){
-    sheetsPost({ action: 'addHistory', session }).catch(e => console.warn('History sync failed', e));
-  }
 }
 
 function renderHistory(){
