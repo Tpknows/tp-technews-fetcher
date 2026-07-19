@@ -629,12 +629,25 @@ feed.addEventListener('click', async (e) => {
       setStatus('Clipboard blocked — select and copy the text manually.', true);
     }
   } else if(action === 'download'){
-    const canvas = document.getElementById(`canvas-${id}`);
-    if(canvas){
-      const a = document.createElement('a');
-      a.download = `${(d.headline || 'post').slice(0,40).replace(/[^\w]+/g,'-')}.jpg`;
-      a.href = canvas.toDataURL('image/jpeg', 0.92);
-      a.click();
+    btn.disabled = true;
+    btn.textContent = 'Preparing…';
+    try{
+      await drawGraphic(d); // make sure the canvas is fully drawn before we grab it
+      const canvas = document.getElementById(`canvas-${id}`);
+      if(canvas){
+        const a = document.createElement('a');
+        a.download = `${(d.headline || 'post').slice(0,40).replace(/[^\w]+/g,'-')}.jpg`;
+        a.href = canvas.toDataURL('image/jpeg', 0.92);
+        document.body.appendChild(a); // required for download to fire on some mobile browsers
+        a.click();
+        a.remove();
+      }
+    }catch(err){
+      console.error(err);
+      setStatus('Could not prepare the download — try again.', true);
+    }finally{
+      btn.disabled = false;
+      btn.textContent = 'Download PNG';
     }
   } else if(action === 'fetch-photo'){
     setStatus('Trying to pull the photo from the article…');
@@ -825,23 +838,21 @@ function drawWrappedHighlighted(ctx, text, highlightWords, x, y, maxWidth, lineH
   return cy; // return last y used
 }
 
-async function drawGraphic(d){
-  const canvas = document.getElementById(`canvas-${d.id}`);
-  if(!canvas || !d.imageData) return;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height; // 1080 x 1080
+function drawGraphic(d){
+  return new Promise((resolve) => {
+    const canvas = document.getElementById(`canvas-${d.id}`);
+    if(!canvas || !d.imageData){ resolve(false); return; }
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height; // 1080 x 1080
 
-  try{
-    await Promise.all([
+    Promise.all([
       document.fonts.load('800 52px Sora'),
       document.fonts.load('700 34px Sora'),
       document.fonts.load('400 30px Sora'),
       document.fonts.load('600 26px "IBM Plex Mono"')
-    ]);
-  }catch(e){}
-
-  const img = new Image();
-  img.onload = () => {
+    ]).catch(() => {}).then(() => {
+      const img = new Image();
+      img.onload = () => {
     ctx.clearRect(0, 0, W, H);
 
     // ── Layout constants ──────────────────────────────────
@@ -922,9 +933,12 @@ async function drawGraphic(d){
     ctx.fill();
     ctx.fillStyle = '#4ade80';
     ctx.fillText(handle, PAD + 16, ty);
-  };
-  img.onerror = () => setStatus('Could not render that photo.', true);
-  img.src = d.imageData;
+        resolve(true);
+      };
+      img.onerror = () => { setStatus('Could not render that photo.', true); resolve(false); };
+      img.src = d.imageData;
+    });
+  });
 }
 
 tabs.addEventListener('click', async (e) => {
