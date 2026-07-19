@@ -18,11 +18,11 @@ export default {
 
     const { prompt, systemPrompt } = body;
 
-    // Gemini Flash-Lite — current free tier, supports Google Search grounding.
-    // (gemini-2.0-flash was deprecated/shut down June 1, 2026 — its free
-    // tier quota is now 0, which is why calls were failing with a 429
-    // "RESOURCE_EXHAUSTED ... limit: 0" error.)
-    const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${env.GEMINI_API_KEY}`;
+    // Gemini 3.1 Flash-Lite — current GA model, free tier, supports Google
+    // Search grounding. Using the explicit stable name instead of the
+    // "-latest" alias avoids that alias silently pointing at a newer/preview
+    // model with its own separate (and possibly stricter) quota.
+    const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${env.GEMINI_API_KEY}`;
 
     const geminiBody = {
       system_instruction: {
