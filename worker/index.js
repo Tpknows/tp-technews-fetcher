@@ -31,7 +31,11 @@ export default {
       contents: [
         { role: "user", parts: [{ text: prompt }] }
       ],
-      tools: [{ google_search: {} }],  // free built-in Google Search grounding
+      // TEMPORARILY DISABLED for testing — if removing this fixes the 429,
+      // it confirms the google_search grounding tool itself needs a paid/
+      // billing-enabled tier now (its free quota may be 0), separate from
+      // the plain text-generation quota shown in your AI Studio dashboard.
+      // tools: [{ google_search: {} }],
       generationConfig: {
         maxOutputTokens: 4096,
         temperature: 0.7
