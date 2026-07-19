@@ -238,6 +238,15 @@
     padding: 10px 14px; border-radius: 8px; font-size: 13px;
   }
   .source-hint{ font-size: 11.5px; color: var(--text-dim); margin: 10px 0 0; }
+  .handle-bar{ display:flex; align-items:center; gap:10px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 16px; margin-bottom:12px; flex-wrap:wrap; }
+  .handle-bar label{ font-size:13px; color:var(--text-dim); white-space:nowrap; }
+  .handle-input-wrap{ display:flex; align-items:center; background:var(--bg); border:1px solid var(--border); border-radius:7px; padding:0 10px; gap:2px; }
+  .handle-at{ font-family:'IBM Plex Mono',monospace; font-size:14px; color:var(--trace); }
+  .handle-input-wrap input{ background:transparent; border:none; outline:none; font-family:'IBM Plex Mono',monospace; font-size:14px; color:var(--text); width:160px; padding:7px 2px; }
+  .btn-save-handle{ background:var(--trace); color:#0a0f0d; border:none; border-radius:7px; padding:7px 16px; font-size:13px; font-weight:700; cursor:pointer; }
+  .btn-save-handle:hover{ opacity:0.85; }
+  .handle-saved{ font-size:12px; color:var(--trace); opacity:0; transition:opacity 0.3s; }
+  .handle-saved.show{ opacity:1; }
 
   .graphic-block{
     margin-top: 14px;
@@ -291,6 +300,16 @@
 </header>
 
 <main>
+  <div class="handle-bar">
+    <label for="handleInput">🏷️ Page handle:</label>
+    <div class="handle-input-wrap">
+      <span class="handle-at">@</span>
+      <input type="text" id="handleInput" placeholder="tammypadal" maxlength="40" spellcheck="false">
+    </div>
+    <button class="btn-save-handle" id="saveHandleBtn">Save</button>
+    <span class="handle-saved" id="handleSaved">✓ Saved</span>
+  </div>
+
   <div class="sources-panel" id="sourcesPanel">
     <div class="sources-head" id="sourcesHead">
       <span class="sources-title">Trusted sources <span class="sources-count" id="sourcesCount"></span></span>
@@ -322,7 +341,27 @@
 </main>
 
 <script>
-const PAGE_NAME = "tpknows";
+let PAGE_NAME = "tpknows";
+
+// Load saved handle
+(async () => {
+  try {
+    const res = await window.storage.get('page_handle', false);
+    if(res && res.value) PAGE_NAME = res.value;
+  } catch(e) {}
+  const inp = document.getElementById('handleInput');
+  if(inp) inp.value = PAGE_NAME;
+})();
+
+document.getElementById('saveHandleBtn').addEventListener('click', async () => {
+  const val = document.getElementById('handleInput').value.trim().replace(/^@+/, '');
+  if(!val) return;
+  PAGE_NAME = val;
+  try { await window.storage.set('page_handle', val, false); } catch(e) {}
+  const saved = document.getElementById('handleSaved');
+  saved.classList.add('show');
+  setTimeout(() => saved.classList.remove('show'), 2000);
+});
 let drafts = [];
 let currentFilter = 'all';
 let sources = [];
@@ -567,9 +606,11 @@ feed.addEventListener('change', async (e) => {
 function fetchImageAsDataUrl(url){
   return new Promise((resolve, reject) => {
     if(!url){ reject(new Error('No image URL')); return; }
+    // Route through Worker proxy to bypass CORS restrictions
+    const proxied = `${PROXY_URL.replace(/\/$/, '')}/proxy-image?url=${encodeURIComponent(url)}`;
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    const timeout = setTimeout(() => reject(new Error('Timed out')), 12000);
+    const timeout = setTimeout(() => reject(new Error('Timed out')), 15000);
     img.onload = () => {
       clearTimeout(timeout);
       try{
@@ -580,14 +621,13 @@ function fetchImageAsDataUrl(url){
         const c = document.createElement('canvas');
         c.width = w; c.height = h;
         c.getContext('2d').drawImage(img, 0, 0, w, h);
-        const dataUrl = c.toDataURL('image/jpeg', 0.85); // throws if canvas is tainted
-        resolve(dataUrl);
+        resolve(c.toDataURL('image/jpeg', 0.85));
       }catch(e){
-        reject(e); // tainted canvas (source blocks CORS reuse)
+        reject(e);
       }
     };
     img.onerror = () => { clearTimeout(timeout); reject(new Error('Image failed to load')); };
-    img.src = url;
+    img.src = proxied;
   });
 }
 
