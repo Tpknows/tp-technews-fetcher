@@ -994,20 +994,21 @@ function drawGraphic(d){
         ctx.fillStyle = '#4ade80';
         ctx.fillRect(PAD, stripY, W - PAD * 2, 3);
 
-        // ── @handle pill (moved to top, right under the accent line) ──
+        // ── @handle pill (centered, right under the accent line) ──
         ctx.font = `600 ${HANDLE_SIZE}px "IBM Plex Mono", monospace`;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'alphabetic';
         const handle = PAGE_NAME ? `@${PAGE_NAME.toLowerCase().replace(/\s+/g,'')}` : '@tpknows';
         const pW = ctx.measureText(handle).width + 32;
         const pH = HANDLE_SIZE + 16;
+        const pillX = (W - pW) / 2;
         const pillTopY = stripY + INNER_PAD_TOP;
         const pillTextY = pillTopY + pH / 2 + HANDLE_SIZE * 0.35;
-        roundRect(ctx, PAD, pillTopY, pW, pH, pH / 2);
+        roundRect(ctx, pillX, pillTopY, pW, pH, pH / 2);
         ctx.fillStyle = '#1e2b25';
         ctx.fill();
         ctx.fillStyle = '#4ade80';
-        ctx.fillText(handle, PAD + 16, pillTextY);
+        ctx.fillText(handle, pillX + 16, pillTextY);
 
         // ── Headline (with highlighted keywords in amber) ──────
         let ty = pillTopY + pH + 24 + HEADLINE_SIZE;
