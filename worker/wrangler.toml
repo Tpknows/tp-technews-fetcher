@@ -2,6 +2,6 @@ name = "tammy-tech-news-proxy"
 main = "index.js"
 compatibility_date = "2024-01-01"
 
-# Store your Gemini API key as a secret (free — never put it in this file).
-# Run this once after deploying:
-#   npx wrangler secret put GEMINI_API_KEY
+# After deploying, run these two commands to add your free API keys:
+#   npx wrangler secret put GROQ_API_KEY
+#   npx wrangler secret put TAVILY_API_KEY

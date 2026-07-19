@@ -31,35 +31,60 @@ export default {
     if (request.method === "OPTIONS") return corsResponse(null, 204);
     if (request.method !== "POST") return corsResponse(JSON.stringify({ error: "Method not allowed" }), 405);
 
-    // ── Gemini proxy (POST /) ────────────────────────────────
     let body;
     try { body = await request.json(); }
     catch { return corsResponse(JSON.stringify({ error: "Invalid JSON body" }), 400); }
 
     const { prompt, systemPrompt } = body;
-    const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`;
 
-    const geminiBody = {
-      system_instruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      tools: [{ google_search: {} }],
-      generationConfig: { maxOutputTokens: 4096, temperature: 0.7 }
-    };
+    // ── Step 1: Search with Tavily ───────────────────────────
+    let searchContext = "";
+    try {
+      const tavilyRes = await fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: env.TAVILY_API_KEY,
+          query: "latest PC hardware GPU CPU motherboard news this week",
+          search_depth: "advanced",
+          max_results: 8,
+          include_images: true,
+          include_answer: false,
+        })
+      });
+      const tavilyData = await tavilyRes.json();
+      const results = tavilyData.results || [];
+      searchContext = results.map(r =>
+        `TITLE: ${r.title}\nURL: ${r.url}\nIMAGE: ${r.image || ""}\nSNIPPET: ${r.content?.slice(0, 400) || ""}`
+      ).join("\n\n---\n\n");
+    } catch (e) {
+      searchContext = "(Search unavailable — use your training knowledge for recent PC hardware news)";
+    }
 
-    const apiResponse = await fetch(GEMINI_URL, {
+    // ── Step 2: Generate captions with Groq ─────────────────
+    const fullPrompt = `Here are today's PC hardware news search results:\n\n${searchContext}\n\n---\n\n${prompt}`;
+
+    const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(geminiBody),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        max_tokens: 4096,
+        temperature: 0.7,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: fullPrompt }
+        ]
+      })
     });
 
-    const data = await apiResponse.json();
-    let text = "";
-    try {
-      text = data.candidates?.[0]?.content?.parts
-        ?.filter(p => p.text)?.map(p => p.text)?.join("\n") || "";
-    } catch (e) { text = ""; }
+    const groqData = await groqRes.json();
+    const text = groqData.choices?.[0]?.message?.content || "";
 
-    if (!text) return corsResponse(JSON.stringify({ error: "Gemini returned no text", raw: data }), 500);
+    if (!text) return corsResponse(JSON.stringify({ error: "Groq returned no text", raw: groqData }), 500);
     return corsResponse(JSON.stringify({ text }), 200);
   },
 };
