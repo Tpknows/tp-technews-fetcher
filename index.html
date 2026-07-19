@@ -860,6 +860,42 @@ feed.addEventListener('change', async (e) => {
 // pulling article hero images (bypasses CORS on hotlinked images)
 const PROXY_URL = "https://tp-technews-fetcher.tammy-padal.workers.dev";
 
+// ── Live USD→PHP exchange rate ──────────────────────────────────
+// Free, no-API-key endpoint (open.er-api.com) — updates once a day.
+// Cached in localStorage for a few hours so repeated "Generate drafts"
+// clicks don't refetch every time; falls back to a fixed approximate
+// rate if the fetch fails (offline, endpoint down, etc.) so caption
+// generation never blocks on this.
+const USD_PHP_FALLBACK_RATE = 61.50;
+const USD_PHP_RATE_URL = "https://open.er-api.com/v6/latest/USD";
+const USD_PHP_CACHE_KEY = "usd_php_rate_cache";
+const USD_PHP_CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
+
+async function getUsdToPhpRate(){
+  try{
+    const cached = localStorage.getItem(USD_PHP_CACHE_KEY);
+    if(cached){
+      const parsed = JSON.parse(cached);
+      if(typeof parsed.rate === 'number' && (Date.now() - parsed.fetchedAt) < USD_PHP_CACHE_TTL_MS){
+        return parsed.rate;
+      }
+    }
+  }catch(e){ /* ignore bad cache, fall through to fetch */ }
+
+  try{
+    const res = await fetch(USD_PHP_RATE_URL);
+    if(!res.ok) throw new Error(`rate API returned ${res.status}`);
+    const data = await res.json();
+    const rate = data && data.rates && data.rates.PHP;
+    if(typeof rate !== 'number' || !(rate > 0)) throw new Error('PHP rate missing from response');
+    try{ localStorage.setItem(USD_PHP_CACHE_KEY, JSON.stringify({ rate, fetchedAt: Date.now() })); }catch(e){}
+    return rate;
+  }catch(err){
+    console.warn('Could not fetch live USD-PHP rate, using fallback:', err);
+    return USD_PHP_FALLBACK_RATE;
+  }
+}
+
 // Normalizes a headline for duplicate comparison — lowercase, strip
 // punctuation, collapse whitespace — so "AMD's RX 9070 Just Got..." and
 // "AMD RX 9070 just got..." are recognized as the same story.
@@ -1301,6 +1337,8 @@ async function generateDrafts(){
   genLabel.innerHTML = '<span class="spinner"></span> Searching for news…';
   setStatus('Fetching recent PC hardware/component news…');
 
+  const usdToPhpRate = await getUsdToPhpRate();
+
   const sourceConstraint = sources.length > 0
     ? `Only use these sources — search site-by-site if needed, and skip any story you can't attribute to one of them: ${sources.join(', ')}. Do not use any other outlet.`
     : `Search broadly across reputable tech hardware outlets.`;
@@ -1331,6 +1369,11 @@ Examples of the tone to aim for:
 - "A 4nm node shrink on a GPU that already runs hot. Brave choice. Bold strategy. Let's see if the thermals agree."
 - "Paying ₱8,000 more for 4% more performance is technically a choice. So is lighting your money on fire."
 - "Grabe, akala mo bagong henerasyon na — pero same silicon lang pala, binaguhan lang ng pangalan at presyo. Marketing win, hindi engineering win."
+
+CURRENCY — MAKE PRICES RELATABLE TO A FILIPINO AUDIENCE:
+- Whenever the news mentions a US dollar price, price cut, or cost (MSRP, sale price, price difference, etc.), convert it to Philippine peso using approximately ₱${usdToPhpRate.toFixed(2)} per $1 USD (today's rate, rounded sensibly, no decimal cents in the caption itself) and lead with the peso figure — e.g. "a $50 price cut" becomes "a ~₱${Math.round(50 * usdToPhpRate).toLocaleString('en-PH')} price cut" or "now ~₱${Math.round(50 * usdToPhpRate).toLocaleString('en-PH')} cheaper (about $50)".
+- This rate is an approximation and drifts daily — treat it as "roughly" rather than exact, and don't present it as a precise bank rate.
+- Do this in BOTH caption_graphic and caption_feed. Raw, unconverted dollar figures should not appear alone — Filipino buyers think in pesos.
 
 CRITICAL — "url" FIELD RULES:
 - "url" must be the exact, direct link to the specific news article — the full path to that one story, not the outlet's homepage, not a category/section/tag page (e.g. never something like "https://example.com/" or "https://example.com/news/"), and not a search-results page.
