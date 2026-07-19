@@ -572,6 +572,9 @@ function render(){
         </div>
         <h3 class="headline">${escapeHtml(d.headline)}</h3>
         <p class="source-line">${escapeHtml(d.source || '')}${d.url ? ` · <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">source ↗</a>` : ''}</p>
+        <span class="graphic-label" style="margin-top:10px;">Caption for graphic (text on image)</span>
+        <textarea data-id="${d.id}" class="graphic-caption-input" style="margin-bottom:12px;">${escapeHtml(d.graphicCaption != null ? d.graphicCaption : d.caption)}</textarea>
+        <span class="graphic-label">Caption for Facebook post/feed</span>
         <textarea data-id="${d.id}" class="caption-input">${escapeHtml(d.caption)}</textarea>
         <div class="graphic-block">
           <span class="graphic-label">Post graphic</span>
@@ -589,7 +592,7 @@ function render(){
           </div>
         </div>
         <div class="card-actions">
-          <button class="mini-btn copy" data-action="copy" data-id="${d.id}">Copy caption</button>
+          <button class="mini-btn copy" data-action="copy" data-id="${d.id}">Copy feed caption</button>
           ${d.status === 'draft' ? `<button class="mini-btn approve" data-action="approve" data-id="${d.id}">✓ Approve</button>` : ''}
           ${d.status === 'approved' ? `<button class="mini-btn posted" data-action="posted" data-id="${d.id}">Mark posted</button>` : ''}
           <button class="mini-btn delete" data-action="delete" data-id="${d.id}">Delete</button>
@@ -608,6 +611,14 @@ feed.addEventListener('input', (e) => {
     const id = e.target.dataset.id;
     const d = drafts.find(x => x.id === id);
     if(d){ d.caption = e.target.value; saveDrafts(); }
+  } else if(e.target.classList.contains('graphic-caption-input')){
+    const id = e.target.dataset.id;
+    const d = drafts.find(x => x.id === id);
+    if(d){
+      d.graphicCaption = e.target.value;
+      saveDrafts();
+      if(d.imageData) drawGraphic(d); // live-update the rendered graphic
+    }
   }
 });
 
