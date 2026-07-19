@@ -184,7 +184,27 @@
     border: 2px solid rgba(5,19,10,0.3); border-top-color: #05130a;
     animation: spin 0.7s linear infinite;
   }
+  .spinner.spinner-dark{
+    border: 2px solid rgba(232,237,233,0.25); border-top-color: var(--text);
+  }
   @keyframes spin{ to{ transform: rotate(360deg); } }
+
+  .prompt-box{
+    margin-top: 10px;
+    padding: 12px;
+    background: var(--panel-2);
+    border: 1px dashed var(--trace-dim);
+    border-radius: 10px;
+  }
+  .prompt-output{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    background: transparent;
+    border: 1px solid var(--line);
+    margin: 6px 0 10px;
+  }
+  .mini-btn.copy-prompt.copied{ color: var(--trace); border-color: var(--trace-dim); }
 
   .sources-panel{
     background: var(--panel);
@@ -586,8 +606,15 @@ function render(){
               <input type="file" accept="image/*" class="photo-input" data-id="${d.id}">
             </label>
             ${(!d.imageData && d.imageUrl) ? `<button class="mini-btn fetch-photo" data-action="fetch-photo" data-id="${d.id}">🔗 Try fetch from article</button>` : ''}
+            <button class="mini-btn genprompt" data-action="gen-prompt" data-id="${d.id}">${d.generatingPrompt ? '<span class="spinner spinner-dark"></span> Generating…' : (d.imagePrompt ? '🎨 Regenerate image prompt' : '🎨 Generate image prompt (ChatGPT)')}</button>
             <button class="mini-btn download" data-action="download" data-id="${d.id}">Download PNG</button>
           </div>
+          ${d.imagePrompt ? `
+          <div class="prompt-box">
+            <span class="graphic-label">AI image prompt (paste into ChatGPT / DALL·E image generator)</span>
+            <textarea class="prompt-output" readonly rows="4">${escapeHtml(d.imagePrompt)}</textarea>
+            <button class="mini-btn copy-prompt ${d.promptCopied ? 'copied' : ''}" data-action="copy-prompt" data-id="${d.id}">${d.promptCopied ? 'Copied ✓' : '📋 Copy prompt'}</button>
+          </div>` : ''}
         </div>
         <div class="card-actions">
           <button class="mini-btn copy" data-action="copy" data-id="${d.id}">Copy feed caption</button>
@@ -669,6 +696,30 @@ feed.addEventListener('click', async (e) => {
       console.warn(err);
       setStatus('That site blocks reuse of its image — keeping the auto category graphic instead. Upload your own photo if you want to replace it.', true);
       btn.disabled = false;
+    }
+  } else if(action === 'gen-prompt'){
+    d.generatingPrompt = true;
+    render();
+    try{
+      const prompt = await generateImagePrompt(d);
+      d.imagePrompt = prompt;
+      d.promptCopied = false;
+      await saveDrafts();
+    }catch(err){
+      console.error(err);
+      setStatus(`Could not generate an image prompt: ${err.message || 'unknown error'}`, true);
+    }finally{
+      d.generatingPrompt = false;
+      render();
+    }
+  } else if(action === 'copy-prompt'){
+    try{
+      await navigator.clipboard.writeText(d.imagePrompt || '');
+      d.promptCopied = true;
+      render();
+      setTimeout(() => { d.promptCopied = false; render(); }, 1500);
+    }catch(err){
+      setStatus('Clipboard blocked — select and copy the prompt manually.', true);
     }
   } else if(action === 'approve'){
     d.status = 'approved'; await saveDrafts(); render();
@@ -759,6 +810,48 @@ async function autoFetchPhotos(newDrafts){
     setStatus(`Auto-fetching photos… (${done}/${candidates.length})`);
   }
   setStatus('');
+}
+
+// Asks the AI (via the same Worker proxy used for drafts) to write a
+// single, vivid image-generation prompt for this specific story — meant
+// to be pasted into ChatGPT's image generator (or DALL·E/similar) so
+// every post can get a unique graphic even when no real photo is
+// available or wanted. This only returns TEXT — it does not create an
+// image itself, and never blocks the existing "upload your own photo"
+// or "fetch from article" options.
+async function generateImagePrompt(d){
+  const systemPrompt = `You are a visual prompt writer for a Filipino PC hardware/tech news page. Given a news headline, category, and caption, write ONE single, vivid, highly-specific prompt for an AI image generator (ChatGPT/DALL·E style) that will produce a unique, on-brand square (1:1) editorial graphic for this story.
+
+Rules for the prompt you write:
+- Describe a concrete visual scene (product, setting, lighting, mood, composition) — not abstract concepts.
+- Match the category's subject matter (GPU/CPU/motherboard/peripheral/etc.) with plausible, generic hardware — do not name specific real brand logos or trademarked packaging designs.
+- Aesthetic: dark, moody tech-editorial look — deep green/black tones, subtle neon or copper accent lighting, high detail, photorealistic or clean 3D render style.
+- Explicitly state: no text, no logos, no watermarks, no captions in the image.
+- Aspect ratio: square, 1:1.
+- Length: 2-4 sentences.
+
+Respond with ONLY the prompt text itself — no preamble, no quotes, no markdown, no labels like "Prompt:".`;
+
+  const userPrompt = `Headline: ${d.headline}\nCategory: ${d.category || 'General'}\nCaption: ${d.graphicCaption != null ? d.graphicCaption : d.caption}`;
+
+  const response = await fetch(PROXY_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ systemPrompt, prompt: userPrompt })
+  });
+
+  if(!response.ok){
+    let detail = '';
+    try{ detail = (await response.json()).error || ''; }catch(e){}
+    throw new Error(`API error ${response.status}${detail ? ': ' + detail : ''}`);
+  }
+
+  const data = await response.json();
+  if(data.error) throw new Error(data.error);
+
+  const text = (data.text || '').trim();
+  if(!text) throw new Error('No response from AI — please try again.');
+  return text;
 }
 
 function compressImage(file, maxDim, quality){
@@ -1144,6 +1237,8 @@ Respond with ONLY a raw JSON array (no markdown fences, no commentary) where eac
         highlight_words: Array.isArray(it.highlight_words) ? it.highlight_words : [],
         imageUrl: it.image_url || '',
         imageData: null,
+        imagePrompt: null,
+        promptCopied: false,
         status: 'draft',
         createdAt: now
       };
