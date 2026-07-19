@@ -247,6 +247,10 @@
   .btn-save-handle:hover{ opacity:0.85; }
   .handle-saved{ font-size:12px; color:var(--trace); opacity:0; transition:opacity 0.3s; }
   .handle-saved.show{ opacity:1; }
+  .history-session{ margin-bottom:28px; }
+  .history-session-head{ font-size:12px; color:var(--text-dim); font-family:"IBM Plex Mono",monospace; padding:6px 0; border-bottom:1px solid var(--border); margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; }
+  .history-clear-btn{ font-size:11px; color:var(--danger); background:none; border:none; cursor:pointer; padding:2px 6px; }
+  .history-empty{ text-align:center; color:var(--text-dim); padding:60px 20px; font-size:14px; }
 
   .graphic-block{
     margin-top: 14px;
@@ -334,6 +338,7 @@
       <button class="btn-ghost" data-filter="draft">Draft</button>
       <button class="btn-ghost" data-filter="approved">Approved</button>
       <button class="btn-ghost" data-filter="posted">Posted</button>
+      <button class="btn-ghost" data-filter="history">🕒 History</button>
     </div>
   </div>
   <div class="status-line" id="statusLine"></div>
@@ -365,6 +370,7 @@ document.getElementById('saveHandleBtn').addEventListener('click', async () => {
 let drafts = [];
 let currentFilter = 'all';
 let sources = [];
+let history_sessions = []; // [{date, label, drafts:[]}]
 const DEFAULT_SOURCES = [
   "Tom's Hardware", "Videocardz", "TechPowerUp", "Wccftech", "Notebookcheck", "YugaTech"
 ];
@@ -460,6 +466,78 @@ async function saveDrafts(){
   }catch(e){
     setStatus('Could not save — your last change may not persist.', true);
   }
+}
+
+async function loadHistory(){
+  try{
+    const res = await window.storage.get('history_sessions', false);
+    history_sessions = res && res.value ? JSON.parse(res.value) : [];
+  }catch(e){ history_sessions = []; }
+}
+
+async function saveHistory(){
+  try{
+    // Keep last 50 sessions max
+    if(history_sessions.length > 50) history_sessions = history_sessions.slice(0, 50);
+    await window.storage.set('history_sessions', JSON.stringify(history_sessions), false);
+  }catch(e){ console.warn('History save failed', e); }
+}
+
+async function addToHistory(newDrafts){
+  await loadHistory();
+  const now = new Date();
+  const label = now.toLocaleDateString('en-PH', { month:'short', day:'numeric', year:'numeric' })
+    + ' · ' + now.toLocaleTimeString('en-PH', { hour:'2-digit', minute:'2-digit' });
+  // Store only lightweight data (no imageData blobs — too heavy)
+  const lightDrafts = newDrafts.map(d => ({
+    id: d.id,
+    headline: d.headline,
+    source: d.source,
+    url: d.url,
+    category: d.category,
+    caption: d.caption,
+    imageUrl: d.imageUrl,
+    status: d.status,
+    createdAt: d.createdAt,
+  }));
+  history_sessions.unshift({ date: now.toISOString(), label, drafts: lightDrafts });
+  await saveHistory();
+}
+
+function renderHistory(){
+  const feed = document.getElementById('feed');
+  if(!history_sessions.length){
+    feed.innerHTML = `<div class="history-empty">📭 Wala pang history.<br>Mag-generate ng drafts para ma-save dito.</div>`;
+    return;
+  }
+  feed.innerHTML = history_sessions.map((session, si) => `
+    <div class="history-session">
+      <div class="history-session-head">
+        <span>📅 ${escapeHtml(session.label)} · ${session.drafts.length} draft${session.drafts.length !== 1 ? 's' : ''}</span>
+        <button class="history-clear-btn" data-session="${si}">Remove</button>
+      </div>
+      ${session.drafts.map(d => `
+        <div class="card" style="margin-bottom:10px;">
+          <div class="card-meta">
+            <span class="badge badge-${(d.category||'General').toLowerCase()}">${escapeHtml(d.category||'General')}</span>
+            <span class="source-line">${escapeHtml(d.source||'')}${d.url ? ` · <a href="${escapeHtml(d.url)}" target="_blank">Article ↗</a>` : ''}</span>
+          </div>
+          <div class="card-headline">${escapeHtml(d.headline)}</div>
+          <div class="card-caption" style="font-size:13px;color:var(--text-dim);margin-top:6px;white-space:pre-wrap;">${escapeHtml(d.caption)}</div>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+
+  // Remove session handler
+  feed.querySelectorAll('.history-clear-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const si = parseInt(btn.dataset.session);
+      history_sessions.splice(si, 1);
+      await saveHistory();
+      renderHistory();
+    });
+  });
 }
 
 function escapeHtml(str){
@@ -817,12 +895,17 @@ async function drawGraphic(d){
   img.src = d.imageData;
 }
 
-tabs.addEventListener('click', (e) => {
+tabs.addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-filter]');
   if(!btn) return;
   currentFilter = btn.dataset.filter;
   [...tabs.children].forEach(b => b.classList.toggle('active', b === btn));
-  render();
+  if(currentFilter === 'history'){
+    await loadHistory();
+    renderHistory();
+  } else {
+    render();
+  }
 });
 
 async function generateDrafts(){
@@ -915,6 +998,7 @@ Respond with ONLY a raw JSON array (no markdown fences, no commentary) where eac
 
     drafts = [...newDrafts, ...drafts];
     await saveDrafts();
+    await addToHistory(newDrafts); // auto-save every generation to history
     currentFilter = 'all';
     [...tabs.children].forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
     render();
