@@ -1,45 +1,49 @@
 export default {
   async fetch(request, env) {
-    // Handle CORS preflight
-    if (request.method === "OPTIONS") {
-      return corsResponse(null, 204);
+    const url = new URL(request.url);
+
+    // ── Image proxy (/proxy-image?url=...) ──────────────────
+    if (url.pathname === "/proxy-image") {
+      const imgUrl = url.searchParams.get("url");
+      if (!imgUrl) return new Response("Missing url param", { status: 400 });
+      try {
+        const imgRes = await fetch(imgUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1)",
+            "Referer": new URL(imgUrl).origin,
+          }
+        });
+        const contentType = imgRes.headers.get("content-type") || "image/jpeg";
+        return new Response(imgRes.body, {
+          status: imgRes.status,
+          headers: {
+            "Content-Type": contentType,
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "public, max-age=86400",
+          }
+        });
+      } catch (e) {
+        return new Response("Image fetch failed: " + e.message, { status: 502 });
+      }
     }
 
-    if (request.method !== "POST") {
-      return corsResponse(JSON.stringify({ error: "Method not allowed" }), 405);
-    }
+    // ── CORS preflight ───────────────────────────────────────
+    if (request.method === "OPTIONS") return corsResponse(null, 204);
+    if (request.method !== "POST") return corsResponse(JSON.stringify({ error: "Method not allowed" }), 405);
 
+    // ── Gemini proxy (POST /) ────────────────────────────────
     let body;
-    try {
-      body = await request.json();
-    } catch {
-      return corsResponse(JSON.stringify({ error: "Invalid JSON body" }), 400);
-    }
+    try { body = await request.json(); }
+    catch { return corsResponse(JSON.stringify({ error: "Invalid JSON body" }), 400); }
 
     const { prompt, systemPrompt } = body;
-
-    // Gemini 3.1 Flash-Lite — current GA model, free tier, supports Google
-    // Search grounding. Using the explicit stable name instead of the
-    // "-latest" alias avoids that alias silently pointing at a newer/preview
-    // model with its own separate (and possibly stricter) quota.
-    const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${env.GEMINI_API_KEY}`;
+    const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`;
 
     const geminiBody = {
-      system_instruction: {
-        parts: [{ text: systemPrompt }]
-      },
-      contents: [
-        { role: "user", parts: [{ text: prompt }] }
-      ],
-      // TEMPORARILY DISABLED for testing — if removing this fixes the 429,
-      // it confirms the google_search grounding tool itself needs a paid/
-      // billing-enabled tier now (its free quota may be 0), separate from
-      // the plain text-generation quota shown in your AI Studio dashboard.
-      // tools: [{ google_search: {} }],
-      generationConfig: {
-        maxOutputTokens: 4096,
-        temperature: 0.7
-      }
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      tools: [{ google_search: {} }],
+      generationConfig: { maxOutputTokens: 4096, temperature: 0.7 }
     };
 
     const apiResponse = await fetch(GEMINI_URL, {
@@ -49,22 +53,13 @@ export default {
     });
 
     const data = await apiResponse.json();
-
-    // Extract text from Gemini's response format
     let text = "";
     try {
       text = data.candidates?.[0]?.content?.parts
-        ?.filter(p => p.text)
-        ?.map(p => p.text)
-        ?.join("\n") || "";
-    } catch (e) {
-      text = "";
-    }
+        ?.filter(p => p.text)?.map(p => p.text)?.join("\n") || "";
+    } catch (e) { text = ""; }
 
-    if (!text) {
-      return corsResponse(JSON.stringify({ error: "Gemini returned no text", raw: data }), 500);
-    }
-
+    if (!text) return corsResponse(JSON.stringify({ error: "Gemini returned no text", raw: data }), 500);
     return corsResponse(JSON.stringify({ text }), 200);
   },
 };
@@ -75,7 +70,7 @@ function corsResponse(body, status = 200) {
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
       "Access-Control-Allow-Headers": "Content-Type",
     },
   });
