@@ -756,6 +756,29 @@ feed.addEventListener('change', async (e) => {
 // pulling article hero images (bypasses CORS on hotlinked images)
 const PROXY_URL = "https://tp-technews-fetcher.tammy-padal.workers.dev";
 
+// Detects a URL that's just the site's homepage or a bare
+// category/section page rather than a specific article — e.g.
+// "https://example.com/", "https://example.com/news", or
+// "https://example.com/category/gpu/". Used to stop those from being
+// shown/linked as if they were the actual source article.
+function isHomepageUrl(url){
+  try{
+    const u = new URL(url);
+    const path = u.pathname.replace(/\/+$/, ''); // strip trailing slash(es)
+    if(path === '') return true; // just the domain root
+    const segments = path.split('/').filter(Boolean);
+    // A single short segment with no digits/dashes-with-numbers usually
+    // means a section/category page (e.g. /news, /reviews, /gpu) rather
+    // than a specific article slug.
+    if(segments.length === 1 && segments[0].length <= 20 && !/\d/.test(segments[0])){
+      return true;
+    }
+    return false;
+  }catch(e){
+    return true; // not a valid absolute URL — treat as unusable
+  }
+}
+
 function fetchImageAsDataUrl(url){
   return new Promise((resolve, reject) => {
     if(!url){ reject(new Error('No image URL')); return; }
@@ -1050,7 +1073,23 @@ function drawGraphic(d){
         const handleH = HANDLE_SIZE + 16 + 24; // pill height + gap before headline (now sits at the top of the strip)
 
         const stripH = INNER_PAD_TOP + handleH + headH + 20 + capH + INNER_PAD_BOT;
-        const imgAreaH = H - STRIP_GAP - stripH;
+        let imgAreaH = H - STRIP_GAP - stripH;
+
+        // Cap how much of the graphic the photo can take up. Without this,
+        // a short caption shrinks the strip and lets the photo balloon —
+        // which also means a much more aggressive cover-fit crop/zoom on
+        // the photo. Keep it visually balanced (~58% max) regardless of
+        // caption length, and give the leftover space back to the strip.
+        const MAX_IMG_RATIO = 0.58;
+        const maxImgAreaH = Math.round(H * MAX_IMG_RATIO);
+        if(imgAreaH > maxImgAreaH){
+          imgAreaH = maxImgAreaH;
+        }
+        // If we capped it, the strip is now taller than the text actually
+        // needs — center the text block vertically in that extra room
+        // instead of leaving it pinned to the top with dead space below.
+        const actualStripH = H - STRIP_GAP - imgAreaH;
+        const stripTopPad = INNER_PAD_TOP + Math.max(0, (actualStripH - stripH) / 2);
 
         ctx.fillStyle = '#0a0f0d';
         ctx.fillRect(0, 0, W, H);
@@ -1095,7 +1134,7 @@ function drawGraphic(d){
         const pW = ctx.measureText(handle).width + 32;
         const pH = HANDLE_SIZE + 16;
         const pillX = (W - pW) / 2;
-        const pillTopY = stripY + INNER_PAD_TOP;
+        const pillTopY = stripY + stripTopPad;
         const pillTextY = pillTopY + pH / 2 + HANDLE_SIZE * 0.35;
         roundRect(ctx, pillX, pillTopY, pW, pH, pH / 2);
         ctx.fillStyle = '#1e2b25';
@@ -1165,7 +1204,7 @@ Both should be:
 - FIRST LINE = HOOK — open with a sharp observation, a contrarian take, an unexpected analogy, or a question that makes someone stop scrolling. Never start with the brand name or "AMD announces...".
 
 "caption_graphic" — the short version that gets overlaid on the image itself:
-- 45-80 words, punchy, scannable at a glance. No hashtags (the graphic doesn't need them).
+- MUST be 45-80 words — do not go shorter than 45 words, even for simple news. A one-sentence teaser is not acceptable; unpack the "why it matters" enough to fill that range. Punchy and scannable, but complete. No hashtags (the graphic doesn't need them).
 
 "caption_feed" — the longer version that gets posted as the actual Facebook status/feed text:
 - 120-200 words. Go deeper than the graphic version: unpack the specs or numbers that matter, give your actual read on whether this is a big deal or overhyped, add a comparison to a prior generation or a rival product, and give buyers/builders concrete guidance (worth waiting for, worth upgrading, skip it, etc.).
@@ -1176,8 +1215,13 @@ Examples of the tone to aim for:
 - "A 4nm node shrink on a GPU that already runs hot. Brave choice. Bold strategy. Let's see if the thermals agree."
 - "Paying ₱8,000 more for 4% more performance is technically a choice. So is lighting your money on fire."
 
+CRITICAL — "url" FIELD RULES:
+- "url" must be the exact, direct link to the specific news article — the full path to that one story, not the outlet's homepage, not a category/section/tag page (e.g. never something like "https://example.com/" or "https://example.com/news/"), and not a search-results page.
+- Only return a url you actually retrieved from search results — never construct, guess, or shorten one.
+- If you cannot find that specific article's direct URL, set "url" to an empty string ("") rather than falling back to the homepage or guessing.
+
 Respond with ONLY a raw JSON array (no markdown fences, no commentary) where each item has exactly these fields:
-[{"headline": "...", "source": "publication name", "url": "article url", "image_url": "direct URL to the article's main/hero image if you can identify one, otherwise empty string", "category": "GPU|CPU|Storage|Motherboard|Peripherals|Cooling|PSU|General", "caption_graphic": "the short caption for the image graphic", "caption_feed": "the longer, more detailed caption for the Facebook feed post", "highlight_words": ["1-3 key words or short product names from the headline to visually emphasize, e.g. product names, brand names, or standout numbers"]}]`;
+[{"headline": "...", "source": "publication name", "url": "the exact direct article URL, or empty string if unknown — never the homepage", "image_url": "direct URL to the article's main/hero image if you can identify one, otherwise empty string", "category": "GPU|CPU|Storage|Motherboard|Peripherals|Cooling|PSU|General", "caption_graphic": "the short caption for the image graphic", "caption_feed": "the longer, more detailed caption for the Facebook feed post", "highlight_words": ["1-3 key words or short product names from the headline to visually emphasize, e.g. product names, brand names, or standout numbers"]}]`;
 
   try{
     setStatus('Searching recent hardware news…');
@@ -1218,10 +1262,18 @@ Respond with ONLY a raw JSON array (no markdown fences, no commentary) where eac
     if(!Array.isArray(items) || items.length === 0) throw new Error('No news items came back — try again or widen your sources list.');
 
     const now = Date.now();
+    let homepageUrlsDropped = 0;
     const newDrafts = items.map((it, i) => {
       const graphicCap = it.caption_graphic || it.caption || '';
       const feedCap = it.caption_feed || it.caption || graphicCap;
-      const url = it.url || '';
+      let url = it.url || '';
+      if(url && isHomepageUrl(url)){
+        // AI gave us the site's homepage/section page instead of the actual
+        // article — that's worse than no link at all, so drop it rather
+        // than pointing people to the wrong page.
+        url = '';
+        homepageUrlsDropped++;
+      }
       // Keep the graphic's on-image text short (no raw URL clutter) —
       // the longer feed caption gets a "Read more" line with the source
       // link appended, since that's the one actually posted to Facebook.
@@ -1251,7 +1303,7 @@ Respond with ONLY a raw JSON array (no markdown fences, no commentary) where eac
     [...tabs.children].forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
     render();
     autoFetchPhotos(newDrafts); // background, non-blocking — fills in imageData as each resolves
-    setStatus(`Added ${newDrafts.length} new draft${newDrafts.length === 1 ? '' : 's'}.`);
+    setStatus(`Added ${newDrafts.length} new draft${newDrafts.length === 1 ? '' : 's'}.${homepageUrlsDropped ? ` (${homepageUrlsDropped} had no exact article link — source omitted.)` : ''}`);
 
   }catch(err){
     console.error(err);
