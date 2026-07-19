@@ -756,6 +756,16 @@ feed.addEventListener('change', async (e) => {
 // pulling article hero images (bypasses CORS on hotlinked images)
 const PROXY_URL = "https://tp-technews-fetcher.tammy-padal.workers.dev";
 
+// Normalizes a headline for duplicate comparison — lowercase, strip
+// punctuation, collapse whitespace — so "AMD's RX 9070 Just Got..." and
+// "AMD RX 9070 just got..." are recognized as the same story.
+function normalizeForDupe(str){
+  return (str || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
 // Detects a URL that's just the site's homepage or a bare
 // category/section page rather than a specific article — e.g.
 // "https://example.com/", "https://example.com/news", or
@@ -1261,9 +1271,32 @@ Respond with ONLY a raw JSON array (no markdown fences, no commentary) where eac
     }
     if(!Array.isArray(items) || items.length === 0) throw new Error('No news items came back — try again or widen your sources list.');
 
+    // Skip anything that's already in your current drafts — same article
+    // URL, or a headline that's basically the same story worded differently.
+    const existingUrls = new Set(drafts.filter(d => d.url).map(d => d.url.trim().toLowerCase()));
+    const existingHeadlines = new Set(drafts.map(d => normalizeForDupe(d.headline)));
+    const seenInBatchUrls = new Set();
+    const seenInBatchHeadlines = new Set();
+    let duplicatesSkipped = 0;
+
+    const freshItems = items.filter(it => {
+      const url = (it.url || '').trim().toLowerCase();
+      const headline = normalizeForDupe(it.headline);
+      const isDupe =
+        (url && (existingUrls.has(url) || seenInBatchUrls.has(url))) ||
+        (headline && (existingHeadlines.has(headline) || seenInBatchHeadlines.has(headline)));
+      if(isDupe){
+        duplicatesSkipped++;
+        return false;
+      }
+      if(url) seenInBatchUrls.add(url);
+      if(headline) seenInBatchHeadlines.add(headline);
+      return true;
+    });
+
     const now = Date.now();
     let homepageUrlsDropped = 0;
-    const newDrafts = items.map((it, i) => {
+    const newDrafts = freshItems.map((it, i) => {
       const graphicCap = it.caption_graphic || it.caption || '';
       const feedCap = it.caption_feed || it.caption || graphicCap;
       let url = it.url || '';
@@ -1298,12 +1331,17 @@ Respond with ONLY a raw JSON array (no markdown fences, no commentary) where eac
 
     drafts = [...newDrafts, ...drafts];
     await saveDrafts();
-    await addToHistory(newDrafts); // auto-save every generation to history
+    if(newDrafts.length > 0) await addToHistory(newDrafts); // auto-save every generation to history
     currentFilter = 'all';
     [...tabs.children].forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
     render();
-    autoFetchPhotos(newDrafts); // background, non-blocking — fills in imageData as each resolves
-    setStatus(`Added ${newDrafts.length} new draft${newDrafts.length === 1 ? '' : 's'}.${homepageUrlsDropped ? ` (${homepageUrlsDropped} had no exact article link — source omitted.)` : ''}`);
+    if(newDrafts.length > 0) autoFetchPhotos(newDrafts); // background, non-blocking — fills in imageData as each resolves
+
+    const notes = [];
+    if(duplicatesSkipped) notes.push(`skipped ${duplicatesSkipped} duplicate${duplicatesSkipped === 1 ? '' : 's'} already in your drafts`);
+    if(homepageUrlsDropped) notes.push(`${homepageUrlsDropped} had no exact article link — source omitted`);
+    const noteText = notes.length ? ` (${notes.join('; ')}.)` : '';
+    setStatus(`Added ${newDrafts.length} new draft${newDrafts.length === 1 ? '' : 's'}.${noteText}`);
 
   }catch(err){
     console.error(err);
