@@ -141,6 +141,13 @@
   .card[data-status="approved"] .status-pill{ color: var(--trace); }
   .card[data-status="posted"] .status-pill{ color: var(--gray); }
 
+  .dupe-badge{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px; letter-spacing: 0.04em;
+    color: var(--danger); border: 1px solid var(--danger);
+    padding: 2px 7px; border-radius: 5px;
+  }
+
   .headline{ font-size: 16px; font-weight: 700; margin: 0 0 4px; line-height: 1.35; }
   .source-line{ font-size: 12px; color: var(--text-dim); margin: 0 0 12px; }
   .source-line a{ color: var(--text-dim); }
@@ -619,6 +626,41 @@ function renderHistory(){
   });
 }
 
+// Scans the full drafts list and returns the set of draft IDs that share
+// an article URL or a normalized headline with at least one other draft —
+// used to show a "Possible duplicate" badge so duplicates that slip past
+// generation-time dedup (e.g. re-worded headlines) are still visible and
+// easy to clean up manually.
+function computeDuplicateIds(list){
+  const urlFirstId = new Map();
+  const headlineFirstId = new Map();
+  const dupeIds = new Set();
+
+  list.forEach(d => {
+    const url = (d.url || '').trim().toLowerCase();
+    const headline = normalizeForDupe(d.headline);
+
+    if(url){
+      if(urlFirstId.has(url)){
+        dupeIds.add(d.id);
+        dupeIds.add(urlFirstId.get(url));
+      } else {
+        urlFirstId.set(url, d.id);
+      }
+    }
+    if(headline){
+      if(headlineFirstId.has(headline)){
+        dupeIds.add(d.id);
+        dupeIds.add(headlineFirstId.get(headline));
+      } else {
+        headlineFirstId.set(headline, d.id);
+      }
+    }
+  });
+
+  return dupeIds;
+}
+
 function escapeHtml(str){
   const d = document.createElement('div');
   d.textContent = str || '';
@@ -639,6 +681,8 @@ function render(){
     return;
   }
 
+  const dupeIds = computeDuplicateIds(drafts);
+
   feed.innerHTML = list.map(d => `
     <div class="card" data-status="${d.status}" data-id="${d.id}">
       <div class="pin"></div>
@@ -647,6 +691,7 @@ function render(){
           <div class="tag-row">
             <span class="cat">${escapeHtml(d.category || 'Tech')}</span>
             <span class="status-pill">${d.status}</span>
+            ${dupeIds.has(d.id) ? `<span class="dupe-badge" title="Same article link or headline as another draft — check and delete whichever copy you don't need">⚠️ Possible duplicate</span>` : ''}
           </div>
         </div>
         <h3 class="headline">${escapeHtml(d.headline)}</h3>
