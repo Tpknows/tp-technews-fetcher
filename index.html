@@ -304,6 +304,13 @@
 </header>
 
 <main>
+  <div class="handle-bar" id="sheetsBar">
+    <label for="sheetsInput">📊 Google Sheet:</label>
+    <input type="text" id="sheetsInput" placeholder="Paste your Apps Script Web App URL here…" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:7px 12px;font-size:13px;color:var(--text);outline:none;">
+    <button class="btn-save-handle" id="saveSheetBtn">Connect</button>
+    <span class="handle-saved" id="sheetSaved">✓ Connected</span>
+  </div>
+
   <div class="handle-bar">
     <label for="handleInput">🏷️ Page handle:</label>
     <div class="handle-input-wrap">
@@ -351,18 +358,45 @@ let PAGE_NAME = "tpknows";
 // Load saved handle
 (async () => {
   try {
-    const res = await window.storage.get('page_handle', false);
-    if(res && res.value) PAGE_NAME = res.value;
+    const res = localStorage.getItem('page_handle');
+    if(res) PAGE_NAME = res;
   } catch(e) {}
   const inp = document.getElementById('handleInput');
   if(inp) inp.value = PAGE_NAME;
 })();
 
+// Init Sheets URL input
+(()=>{
+  const inp = document.getElementById('sheetsInput');
+  if(inp && SHEETS_URL) inp.value = SHEETS_URL;
+})();
+
+document.getElementById('saveSheetBtn').addEventListener('click', async () => {
+  const val = document.getElementById('sheetsInput').value.trim();
+  if(!val) return;
+  SHEETS_URL = val;
+  localStorage.setItem('sheets_url', val);
+  const saved = document.getElementById('sheetSaved');
+  saved.classList.add('show');
+  setTimeout(() => saved.classList.remove('show'), 2500);
+  // Pull drafts from Sheets immediately
+  setStatus('Connecting to Google Sheet…');
+  const data = await sheetsGet('getDrafts');
+  if(data && data.drafts && data.drafts.length) {
+    drafts = data.drafts;
+    localStorage.setItem('drafts', JSON.stringify(drafts));
+    render();
+    setStatus(`Loaded ${data.drafts.length} drafts from Google Sheet.`);
+  } else {
+    setStatus('Connected! Generate drafts to start syncing.');
+  }
+});
+
 document.getElementById('saveHandleBtn').addEventListener('click', async () => {
   const val = document.getElementById('handleInput').value.trim().replace(/^@+/, '');
   if(!val) return;
   PAGE_NAME = val;
-  try { await window.storage.set('page_handle', val, false); } catch(e) {}
+  try { localStorage.setItem('page_handle', val); } catch(e) {}
   const saved = document.getElementById('handleSaved');
   saved.classList.add('show');
   setTimeout(() => saved.classList.remove('show'), 2000);
@@ -371,6 +405,30 @@ let drafts = [];
 let currentFilter = 'all';
 let sources = [];
 let history_sessions = []; // [{date, label, drafts:[]}]
+
+// ── Google Sheets sync ───────────────────────────────────────
+// Paste your Apps Script Web App URL here after deploying
+let SHEETS_URL = localStorage.getItem('sheets_url') || '';
+
+async function sheetsGet(action) {
+  if (!SHEETS_URL) return null;
+  try {
+    const res = await fetch(`${SHEETS_URL}?action=${action}`);
+    return await res.json();
+  } catch(e) { console.warn('Sheets GET failed', e); return null; }
+}
+
+async function sheetsPost(body) {
+  if (!SHEETS_URL) return null;
+  try {
+    const res = await fetch(SHEETS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    return await res.json();
+  } catch(e) { console.warn('Sheets POST failed', e); return null; }
+}
 const DEFAULT_SOURCES = [
   "Tom's Hardware", "Videocardz", "TechPowerUp", "Wccftech", "Notebookcheck", "YugaTech"
 ];
@@ -395,19 +453,31 @@ function setStatus(msg, isError=false){
 }
 
 async function loadDrafts(){
-  try{
-    const res = await window.storage.get('drafts', false);
-    drafts = res && res.value ? JSON.parse(res.value) : [];
-  }catch(e){
-    drafts = [];
+  // Try Google Sheets first (cross-device), fallback to localStorage
+  if(SHEETS_URL){
+    try{
+      setStatus('Loading from Google Sheet…');
+      const data = await sheetsGet('getDrafts');
+      if(data && data.drafts){
+        drafts = data.drafts;
+        localStorage.setItem('drafts', JSON.stringify(drafts));
+        render();
+        setStatus('');
+        return;
+      }
+    }catch(e){ console.warn('Sheets load failed, using local', e); }
   }
+  try{
+    const res = localStorage.getItem('drafts');
+    drafts = res ? JSON.parse(res) : [];
+  }catch(e){ drafts = []; }
   render();
 }
 
 async function loadSources(){
   try{
-    const res = await window.storage.get('sources', false);
-    sources = res && res.value ? JSON.parse(res.value) : [...DEFAULT_SOURCES];
+    const res = localStorage.getItem('sources');
+    sources = res ? JSON.parse(res) : [...DEFAULT_SOURCES];
   }catch(e){
     sources = [...DEFAULT_SOURCES];
   }
@@ -416,7 +486,7 @@ async function loadSources(){
 
 async function saveSources(){
   try{
-    await window.storage.set('sources', JSON.stringify(sources), false);
+    localStorage.setItem('sources', JSON.stringify(sources));
   }catch(e){
     setStatus('Could not save sources list.', true);
   }
@@ -462,16 +532,34 @@ sourcesHead.addEventListener('click', () => sourcesPanel.classList.toggle('colla
 
 async function saveDrafts(){
   try{
-    await window.storage.set('drafts', JSON.stringify(drafts), false);
+    localStorage.setItem('drafts', JSON.stringify(drafts));
   }catch(e){
     setStatus('Could not save — your last change may not persist.', true);
+  }
+  // Sync to Google Sheets in background (don't await — non-blocking)
+  if(SHEETS_URL){
+    sheetsPost({ action: 'saveDrafts', drafts: drafts.map(d => ({
+      id: d.id, headline: d.headline, source: d.source, url: d.url,
+      category: d.category, caption: d.caption, imageUrl: d.imageUrl || '',
+      status: d.status, createdAt: d.createdAt
+    })) }).catch(e => console.warn('Sheets sync failed', e));
   }
 }
 
 async function loadHistory(){
+  if(SHEETS_URL){
+    try{
+      const data = await sheetsGet('getHistory');
+      if(data && data.sessions){
+        history_sessions = data.sessions;
+        localStorage.setItem('history_sessions', JSON.stringify(history_sessions));
+        return;
+      }
+    }catch(e){ console.warn('Sheets history load failed', e); }
+  }
   try{
-    const res = await window.storage.get('history_sessions', false);
-    history_sessions = res && res.value ? JSON.parse(res.value) : [];
+    const res = localStorage.getItem('history_sessions');
+    history_sessions = res ? JSON.parse(res) : [];
   }catch(e){ history_sessions = []; }
 }
 
@@ -479,7 +567,7 @@ async function saveHistory(){
   try{
     // Keep last 50 sessions max
     if(history_sessions.length > 50) history_sessions = history_sessions.slice(0, 50);
-    await window.storage.set('history_sessions', JSON.stringify(history_sessions), false);
+    localStorage.setItem('history_sessions', JSON.stringify(history_sessions));
   }catch(e){ console.warn('History save failed', e); }
 }
 
@@ -500,8 +588,13 @@ async function addToHistory(newDrafts){
     status: d.status,
     createdAt: d.createdAt,
   }));
-  history_sessions.unshift({ date: now.toISOString(), label, drafts: lightDrafts });
+  const session = { sessionId: `s_${now.getTime()}`, date: now.toISOString(), label, drafts: lightDrafts };
+  history_sessions.unshift(session);
   await saveHistory();
+  // Sync to Google Sheets in background
+  if(SHEETS_URL){
+    sheetsPost({ action: 'addHistory', session }).catch(e => console.warn('History sync failed', e));
+  }
 }
 
 function renderHistory(){
@@ -917,19 +1010,25 @@ async function generateDrafts(){
     ? `Only use these sources — search site-by-site if needed, and skip any story you can't attribute to one of them: ${sources.join(', ')}. Do not use any other outlet.`
     : `Search broadly across reputable tech hardware outlets.`;
 
-  const systemPrompt = `You are a social media content assistant for a Facebook Page called "${PAGE_NAME}", run by a Filipino tech enthusiast and PC repair technician. Find 4 to 6 genuinely recent (last 3-5 days) news items about PC hardware and components: GPUs, CPUs, motherboards, storage, RAM, PSUs, cooling, cases, or peripherals. Prioritize stories relevant to builders and buyers (new releases, price changes, restocks, benchmarks, notable recalls/bugs).
+  const systemPrompt = `You are the voice behind "${PAGE_NAME}" — a Filipino tech page run by someone who actually knows hardware inside-out: a builder, a repair tech, and a sharp observer of the industry. You write Facebook captions that sound like they came from the smartest, wittiest person in the room who also happens to explain things better than most tech journalists.
 
 ${sourceConstraint}
 
-For each item write a ready-to-post Facebook caption in natural Taglish (mixing Tagalog and English the way a Filipino tech creator actually talks). Follow these rules strictly:
-- FIRST LINE must be a punchy hook: a reaction, a bold claim, or a question — never start with "AMD unveils..." or a dry news-report opener. Something like a real person's gut reaction seeing the news.
-- Write in first person with genuine personal opinion/reaction sprinkled in (e.g. "sobrang gulat ako dito", "okay 'to for real", "medyo overpriced pero ganda ng design") — not neutral wire-copy tone.
-- Keep it SHORT and punchy: 35-70 words total, not a full explainer. Cut anything that doesn't add flavor or a key fact.
-- End with 3-5 relevant hashtags.
-- Avoid corporate/stiff phrasing entirely.
+For each news item, write a caption that is:
+- INTELLECTUALLY SHARP — show real understanding of WHY this matters. Connect the dots. Reference context (architecture generations, market positioning, historical comparisons, what this means for builders or buyers). Sound like someone who has built hundreds of PCs and read every spec sheet.
+- WITTY WITHOUT TRYING TOO HARD — clever wordplay, a well-placed analogy, dry humor, or a surprising take. Not memes, not cringe. Think: tech columnist with personality, not hype beast.
+- CONVERSATIONAL BUT ELEVATED — English-dominant with natural Filipino flavor (not forced Taglish). Write how an intelligent Filipino tech creator actually thinks out loud — confident, direct, occasionally self-aware.
+- FIRST LINE = HOOK — open with a sharp observation, a contrarian take, an unexpected analogy, or a question that makes someone stop scrolling. Never start with the brand name or "AMD announces...".
+- 45-80 words — long enough to say something smart, short enough to respect their time.
+- End with 3-5 tight, relevant hashtags.
+
+Examples of the tone to aim for:
+- "Intel just proved that sometimes the best way to win a benchmark is to redefine what you're benchmarking."
+- "A 4nm node shrink on a GPU that already runs hot. Brave choice. Bold strategy. Let's see if the thermals agree."
+- "Paying ₱8,000 more for 4% more performance is technically a choice. So is lighting your money on fire."
 
 Respond with ONLY a raw JSON array (no markdown fences, no commentary) where each item has exactly these fields:
-[{"headline": "...", "source": "publication name", "url": "article url", "image_url": "direct URL to the article's main/hero image if you can identify one, otherwise empty string", "category": "GPU|CPU|Storage|Motherboard|Peripherals|Cooling|PSU|General", "caption": "the facebook caption text", "highlight_words": ["1-3 key words or short product names from the headline to visually emphasize, e.g. product names, brand names, or standout numbers"]}]`;
+[{"headline": "...", "source": "publication name", "url": "article url", "image_url": "direct URL to the article's main/hero image if you can identify one, otherwise empty string", "category": "GPU|CPU|Storage|Motherboard|Peripherals|Cooling|PSU|General", "caption": "the facebook caption text", "highlight_words": ["1-3 key words or short product names from the headline to visually emphasize, e.g. product names, brand names, or standout numbers"]}]``;
 
   try{
     // Point this to your deployed Cloudflare Worker URL
