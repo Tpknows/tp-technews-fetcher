@@ -322,7 +322,7 @@
 </main>
 
 <script>
-const PAGE_NAME = "Tammy Padal";
+const PAGE_NAME = "tpknows";
 let drafts = [];
 let currentFilter = 'all';
 let sources = [];
@@ -711,7 +711,7 @@ async function drawGraphic(d){
     const headH = headLines.length * LINE_H_HEAD;
 
     ctx.font = `400 ${CAPTION_SIZE}px Sora, sans-serif`;
-    const capLines = measureWrappedLines(ctx, d.caption, W - PAD * 2);
+    const capLines = measureWrappedLines(ctx, d.graphicCaption != null ? d.graphicCaption : d.caption, W - PAD * 2);
     const capH = capLines.length * LINE_H_CAP;
 
     ctx.font = `600 ${HANDLE_SIZE}px "IBM Plex Mono", monospace`;
@@ -759,12 +759,12 @@ async function drawGraphic(d){
 
     // ── Caption text (highlighted keywords in green) ───────
     ctx.font = `400 ${CAPTION_SIZE}px Sora, sans-serif`;
-    drawWrappedHighlighted(ctx, d.caption, d.highlight_words, PAD, ty, W - PAD * 2, LINE_H_CAP, '#b8c9be', '#4ade80');
+    drawWrappedHighlighted(ctx, d.graphicCaption != null ? d.graphicCaption : d.caption, d.highlight_words, PAD, ty, W - PAD * 2, LINE_H_CAP, '#b8c9be', '#4ade80');
     ty += capH + 20;
 
     // ── @handle pill ───────────────────────────────────────
     ctx.font = `600 ${HANDLE_SIZE}px "IBM Plex Mono", monospace`;
-    const handle = PAGE_NAME ? `@${PAGE_NAME.toLowerCase().replace(/\s+/g,'')}` : '@tammypadal';
+    const handle = PAGE_NAME ? `@${PAGE_NAME.toLowerCase().replace(/\s+/g,'')}` : '@tpknows';
     const pW = ctx.measureText(handle).width + 32;
     const pH = HANDLE_SIZE + 16;
     roundRect(ctx, PAD, ty - HANDLE_SIZE, pW, pH, pH / 2);
@@ -850,19 +850,28 @@ Respond with ONLY a raw JSON array (no markdown fences, no commentary) where eac
     if(!Array.isArray(items) || items.length === 0) throw new Error('No news items came back — try again or widen your sources list.');
 
     const now = Date.now();
-    const newDrafts = items.map((it, i) => ({
-      id: `d_${now}_${i}`,
-      headline: it.headline || 'Untitled',
-      source: it.source || '',
-      url: it.url || '',
-      category: it.category || 'General',
-      caption: it.caption || '',
-      highlight_words: Array.isArray(it.highlight_words) ? it.highlight_words : [],
-      imageUrl: it.image_url || '',
-      imageData: null,
-      status: 'draft',
-      createdAt: now
-    }));
+    const newDrafts = items.map((it, i) => {
+      const baseCaption = it.caption || '';
+      const url = it.url || '';
+      // Keep the graphic's on-image text short (no raw URL clutter) —
+      // the full caption used for copy/posting gets a "Read more" line
+      // with the source link appended.
+      const captionWithSource = url ? `${baseCaption}\n\nRead more: ${url}` : baseCaption;
+      return {
+        id: `d_${now}_${i}`,
+        headline: it.headline || 'Untitled',
+        source: it.source || '',
+        url,
+        category: it.category || 'General',
+        caption: captionWithSource,
+        graphicCaption: baseCaption,
+        highlight_words: Array.isArray(it.highlight_words) ? it.highlight_words : [],
+        imageUrl: it.image_url || '',
+        imageData: null,
+        status: 'draft',
+        createdAt: now
+      };
+    });
 
     drafts = [...newDrafts, ...drafts];
     await saveDrafts();
