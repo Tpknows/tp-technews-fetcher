@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Tammy Padal — Tech News Drafts</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Anton&display=swap');
 
   :root{
     --bg: #0a0f0d;
@@ -1138,6 +1138,56 @@ function drawWrappedHighlighted(ctx, text, highlightWords, x, y, maxWidth, lineH
   return cy; // return last y used
 }
 
+// Wraps text into an array of lines, where each line is an array of words
+// (not a joined string) — needed so we can measure and center each line
+// individually rather than left-aligning from a fixed x.
+function wrapWordsIntoLines(ctx, text, maxWidth){
+  const words = (text || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let currentLine = [];
+  let currentWidth = 0;
+  const spaceWidth = ctx.measureText(' ').width;
+  words.forEach(word => {
+    const wWidth = ctx.measureText(word).width;
+    const addedWidth = currentLine.length ? spaceWidth + wWidth : wWidth;
+    if(currentWidth + addedWidth > maxWidth && currentLine.length){
+      lines.push(currentLine);
+      currentLine = [word];
+      currentWidth = wWidth;
+    } else {
+      currentLine.push(word);
+      currentWidth += addedWidth;
+    }
+  });
+  if(currentLine.length) lines.push(currentLine);
+  return lines;
+}
+
+// Draws pre-wrapped lines (from wrapWordsIntoLines) centered horizontally
+// around centerX, with per-word highlight support. Returns the y position
+// after the last line.
+function drawCenteredHighlightedLines(ctx, lines, highlightWords, centerX, startY, lineH, normalColor, highlightColor){
+  const highlightSet = new Set((highlightWords || []).map(w => w.toLowerCase()));
+  const spaceWidth = ctx.measureText(' ').width;
+  let y = startY;
+  lines.forEach(lineWords => {
+    let totalWidth = 0;
+    lineWords.forEach((w, i) => {
+      totalWidth += ctx.measureText(w).width;
+      if(i < lineWords.length - 1) totalWidth += spaceWidth;
+    });
+    let x = centerX - totalWidth / 2;
+    lineWords.forEach(word => {
+      const clean = word.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
+      ctx.fillStyle = highlightSet.has(clean) ? highlightColor : normalColor;
+      ctx.fillText(word, x, y);
+      x += ctx.measureText(word).width + spaceWidth;
+    });
+    y += lineH;
+  });
+  return y;
+}
+
 const CATEGORY_STYLES = {
   GPU: { color: '#4ade80', label: 'GPU' },
   CPU: { color: '#e0b04a', label: 'CPU' },
@@ -1217,9 +1267,7 @@ function drawGraphic(d){
     const W = canvas.width, H = canvas.height; // 1080 x 1080
 
     Promise.all([
-      document.fonts.load('800 52px Sora'),
-      document.fonts.load('700 34px Sora'),
-      document.fonts.load('400 30px Sora'),
+      document.fonts.load('400 60px Anton'),
       document.fonts.load('600 26px "IBM Plex Mono"')
     ]).catch(() => {}).then(() => {
 
@@ -1227,48 +1275,44 @@ function drawGraphic(d){
         ctx.clearRect(0, 0, W, H);
 
         // ── Layout constants ──────────────────────────────────
-        const PAD = 56;
-        const HEADLINE_SIZE = 48;
-        const CAPTION_SIZE = 30;
-        const HANDLE_SIZE = 26;
-        const LINE_H_HEAD = 62;
-        const LINE_H_CAP = 44;
-        const STRIP_GAP = 36;   // gap between photo and strip
-        const INNER_PAD_TOP = 40;
-        const INNER_PAD_BOT = 44;
+        const PAD = 64;
+        const CAPTION_SIZE = 54;
+        const LINE_H_CAP = 62;
+        const HANDLE_SIZE = 24;
+        const STRIP_GAP = 0;    // photo runs straight into the light band, no dark gradient gap
+        const INNER_PAD_TOP = 36;
+        const INNER_PAD_BOT = 56;
 
-        // Pre-measure text heights to size the strip
-        ctx.font = `800 ${HEADLINE_SIZE}px Sora, sans-serif`;
-        const headLines = measureWrappedLines(ctx, d.headline, W - PAD * 2);
-        const headH = headLines.length * LINE_H_HEAD;
+        // The single big caption line — this is the field literally meant
+        // for "text on image", styled here as the bold condensed headline.
+        const bandText = (d.graphicCaption != null ? d.graphicCaption : d.caption).toUpperCase();
 
-        ctx.font = `400 ${CAPTION_SIZE}px Sora, sans-serif`;
-        const capLines = measureWrappedLines(ctx, d.graphicCaption != null ? d.graphicCaption : d.caption, W - PAD * 2);
+        ctx.font = `400 ${CAPTION_SIZE}px Anton, sans-serif`;
+        const capLines = wrapWordsIntoLines(ctx, bandText, W - PAD * 2);
         const capH = capLines.length * LINE_H_CAP;
 
         ctx.font = `600 ${HANDLE_SIZE}px "IBM Plex Mono", monospace`;
-        const handleH = HANDLE_SIZE + 16 + 24; // pill height + gap before headline (now sits at the top of the strip)
+        const handleH = HANDLE_SIZE + 16 + 28; // pill height + gap before caption
 
-        const stripH = INNER_PAD_TOP + handleH + headH + 20 + capH + INNER_PAD_BOT;
+        const stripH = INNER_PAD_TOP + handleH + capH + INNER_PAD_BOT;
         let imgAreaH = H - STRIP_GAP - stripH;
 
-        // Cap how much of the graphic the photo can take up. Without this,
-        // a short caption shrinks the strip and lets the photo balloon —
-        // which also means a much more aggressive cover-fit crop/zoom on
-        // the photo. Keep it visually balanced (~58% max) regardless of
-        // caption length, and give the leftover space back to the strip.
-        const MAX_IMG_RATIO = 0.58;
+        // Let the photo take up most of the frame — this style has only
+        // one short text block below it, so it can afford to be much
+        // larger than the old dark layout's photo area.
+        const MAX_IMG_RATIO = 0.76;
         const maxImgAreaH = Math.round(H * MAX_IMG_RATIO);
         if(imgAreaH > maxImgAreaH){
           imgAreaH = maxImgAreaH;
         }
-        // If we capped it, the strip is now taller than the text actually
-        // needs — center the text block vertically in that extra room
-        // instead of leaving it pinned to the top with dead space below.
         const actualStripH = H - STRIP_GAP - imgAreaH;
         const stripTopPad = INNER_PAD_TOP + Math.max(0, (actualStripH - stripH) / 2);
 
-        ctx.fillStyle = '#0a0f0d';
+        const BAND_BG = '#f2efe7';
+        const TEXT_DARK = '#161a17';
+        const HIGHLIGHT_GREEN = '#1c8a4c';
+
+        ctx.fillStyle = BAND_BG;
         ctx.fillRect(0, 0, W, H);
 
         if(photoImg){
@@ -1287,23 +1331,12 @@ function drawGraphic(d){
           drawCategoryBackground(ctx, W, imgAreaH, d.category);
         }
 
-        // Soft gradient at bottom blending into strip
-        const grad = ctx.createLinearGradient(0, imgAreaH - 80, 0, imgAreaH + STRIP_GAP);
-        grad.addColorStop(0, 'rgba(10,15,13,0)');
-        grad.addColorStop(1, 'rgba(10,15,13,1)');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, imgAreaH - 80, W, 80 + STRIP_GAP);
-
-        // ── Dark strip below photo ─────────────────────────────
+        // ── Light band below photo ─────────────────────────────
         const stripY = imgAreaH + STRIP_GAP;
-        ctx.fillStyle = '#0a0f0d';
+        ctx.fillStyle = BAND_BG;
         ctx.fillRect(0, stripY, W, H - stripY);
 
-        // thin green accent line at top of strip
-        ctx.fillStyle = '#4ade80';
-        ctx.fillRect(PAD, stripY, W - PAD * 2, 3);
-
-        // ── @handle pill (centered, right under the accent line) ──
+        // ── @handle pill (white, centered, top of the band) ────
         ctx.font = `600 ${HANDLE_SIZE}px "IBM Plex Mono", monospace`;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'alphabetic';
@@ -1314,22 +1347,19 @@ function drawGraphic(d){
         const pillTopY = stripY + stripTopPad;
         const pillTextY = pillTopY + pH / 2 + HANDLE_SIZE * 0.35;
         roundRect(ctx, pillX, pillTopY, pW, pH, pH / 2);
-        ctx.fillStyle = '#1e2b25';
+        ctx.fillStyle = '#ffffff';
         ctx.fill();
-        ctx.fillStyle = '#4ade80';
-        ctx.fillText(handle, pillX + 16, pillTextY);
+        ctx.fillStyle = TEXT_DARK;
+        ctx.textAlign = 'center';
+        ctx.fillText(handle, pillX + pW / 2, pillTextY);
 
-        // ── Headline (with highlighted keywords in amber) ──────
-        let ty = pillTopY + pH + 24 + HEADLINE_SIZE;
-        ctx.font = `800 ${HEADLINE_SIZE}px Sora, sans-serif`;
+        // ── Big bold condensed caption, centered, highlighted words
+        // in the app's green accent, rest in near-black ────────────
+        let ty = pillTopY + pH + 28 + CAPTION_SIZE * 0.85;
+        ctx.font = `400 ${CAPTION_SIZE}px Anton, sans-serif`;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'alphabetic';
-        drawWrappedHighlighted(ctx, d.headline, d.highlight_words, PAD, ty, W - PAD * 2, LINE_H_HEAD, '#f4f7f5', '#e0b04a');
-        ty += headH + 20;
-
-        // ── Caption text (highlighted keywords in green) ───────
-        ctx.font = `400 ${CAPTION_SIZE}px Sora, sans-serif`;
-        drawWrappedHighlighted(ctx, d.graphicCaption != null ? d.graphicCaption : d.caption, d.highlight_words, PAD, ty, W - PAD * 2, LINE_H_CAP, '#b8c9be', '#4ade80');
+        drawCenteredHighlightedLines(ctx, capLines, d.highlight_words, W / 2, ty, LINE_H_CAP, TEXT_DARK, HIGHLIGHT_GREEN);
 
         resolve(true);
       };
@@ -1406,21 +1436,43 @@ ${scopeConstraint}
 ${buildCaptionInstructions(usdToPhpRate)}`;
 }
 
+function sleep(ms){ return new Promise(res => setTimeout(res, ms)); }
+
 // Calls the proxy once with a given system/user prompt pair and returns the
 // parsed items array. Throws on hard failures (bad API response, unparsable
 // JSON) — but an empty array is a valid, non-error result (e.g. a single
-// source simply had nothing new this month).
-async function fetchNewsBatch(systemPrompt, userPrompt){
-  const response = await fetch(PROXY_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ systemPrompt, prompt: userPrompt })
-  });
+// source simply had nothing new this month). Retries once after a short
+// backoff on a 5xx/network failure, since those are usually transient
+// (rate limits, brief timeouts) rather than a real problem with the prompt.
+async function fetchNewsBatch(systemPrompt, userPrompt, attempt = 1){
+  let response;
+  try{
+    response = await fetch(PROXY_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ systemPrompt, prompt: userPrompt })
+    });
+  }catch(networkErr){
+    if(attempt < 2){
+      await sleep(2500);
+      return fetchNewsBatch(systemPrompt, userPrompt, attempt + 1);
+    }
+    throw new Error(`Network error reaching the AI proxy: ${networkErr.message || 'unknown error'}`);
+  }
 
   if(!response.ok){
-    let detail = '';
-    try{ detail = (await response.json()).error || ''; }catch(e){}
-    throw new Error(`API error ${response.status}${detail ? ': ' + detail : ''}`);
+    // Read as raw text first — a Cloudflare 500 is often an HTML error page,
+    // not JSON, so response.json() alone would silently swallow the detail.
+    const rawText = await response.text().catch(() => '');
+    let detail = rawText;
+    try{ const parsed = JSON.parse(rawText); detail = parsed.error || rawText; }catch(e){ /* not JSON, keep raw text */ }
+    console.warn(`Proxy returned ${response.status} (attempt ${attempt}):`, detail);
+
+    if(response.status >= 500 && attempt < 2){
+      await sleep(2500);
+      return fetchNewsBatch(systemPrompt, userPrompt, attempt + 1);
+    }
+    throw new Error(`API error ${response.status}${detail ? ': ' + detail.slice(0, 200) : ''}`);
   }
 
   const data = await response.json();
@@ -1444,62 +1496,105 @@ async function fetchNewsBatch(systemPrompt, userPrompt){
   return Array.isArray(items) ? items : [];
 }
 
+// Splits the range from monthStart through today into ~7-day chunks. A
+// single "find everything this month" search tends to only surface a
+// handful of top hits — chunking forces a fresh, separate search per
+// window, which is what actually gets closer to ALL of a month's stories
+// instead of just the most recent one or two.
+function computeWeekChunks(monthStart, today){
+  const chunks = [];
+  let chunkStart = new Date(monthStart);
+  while(chunkStart <= today){
+    let chunkEnd = new Date(chunkStart);
+    chunkEnd.setDate(chunkEnd.getDate() + 6);
+    if(chunkEnd > today) chunkEnd = new Date(today);
+    chunks.push({ start: new Date(chunkStart), end: new Date(chunkEnd) });
+    chunkStart = new Date(chunkEnd);
+    chunkStart.setDate(chunkStart.getDate() + 1);
+  }
+  return chunks;
+}
+
 async function generateDrafts(){
   genBtn.disabled = true;
   genLabel.innerHTML = '<span class="spinner"></span> Searching for news…';
 
   const usdToPhpRate = await getUsdToPhpRate();
   const isMonth = scanMode === 'month';
-
   const today = new Date();
-  const dateRangeText = isMonth
-    ? `from ${new Date(today.getFullYear(), today.getMonth(), 1).toDateString()} through today, ${today.toDateString()}`
-    : `today, ${today.toDateString()}`;
-  const sweepNote = isMonth
-    ? ` This is a full-month sweep, not just today's news — return every qualifying story you can find from that window, not just the most recent one or two.`
-    : '';
 
   let items = [];
   const sourceErrors = [];
 
   try{
-    if(isMonth && sources.length > 0){
-      // Thorough mode: one call PER source so each outlet gets a real
-      // full-month sweep instead of being crowded out in a single search.
-      for(let i = 0; i < sources.length; i++){
-        const source = sources[i];
-        genLabel.innerHTML = `<span class="spinner"></span> Searching ${source}… (${i + 1}/${sources.length})`;
-        setStatus(`Searching ${source} for this month's news… (${i + 1}/${sources.length})`);
-        const scopeConstraint = `Only use this one source: ${source}. Do not use any other outlet. Find ALL relevant PC hardware/component news articles this specific outlet published ${dateRangeText}.${sweepNote} If they published 10 relevant stories this month, return all 10, not just the newest one or two.`;
-        const userPrompt = `Find every PC hardware/component news article "${source}" published ${dateRangeText}, and write the Facebook caption drafts as specified for each one.`;
-        const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate);
-        try{
-          const sourceItems = await fetchNewsBatch(systemPrompt, userPrompt);
-          items = items.concat(sourceItems);
-        }catch(err){
-          console.warn(`Search failed for source "${source}":`, err);
-          sourceErrors.push(source);
+    if(isMonth){
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      const weekChunks = computeWeekChunks(monthStart, today);
+      const totalCalls = sources.length > 0 ? sources.length * weekChunks.length : weekChunks.length;
+      let callIndex = 0;
+
+      if(sources.length > 0){
+        // Full exhaustive sweep: one call per SOURCE per WEEK, so no single
+        // search has to surface an entire month's worth of one outlet's
+        // stories at once.
+        for(let si = 0; si < sources.length; si++){
+          const source = sources[si];
+          for(let wi = 0; wi < weekChunks.length; wi++){
+            const chunk = weekChunks[wi];
+            callIndex++;
+            if(callIndex > 1) await sleep(1500); // pace out calls to the proxy/Gemini
+            const rangeText = `from ${chunk.start.toDateString()} through ${chunk.end.toDateString()}`;
+            genLabel.innerHTML = `<span class="spinner"></span> ${source} — week ${wi + 1}/${weekChunks.length} (source ${si + 1}/${sources.length})`;
+            setStatus(`Searching ${source}, ${rangeText}… (call ${callIndex}/${totalCalls})`);
+            const scopeConstraint = `Only use this one source: ${source}. Do not use any other outlet. Find ALL relevant PC hardware/component news articles this specific outlet published ${rangeText}. Return EVERY qualifying story published in that exact window, even if there are several — this is a narrow one-week slice, so completeness matters more than picking just the "best" one.`;
+            const userPrompt = `Find every PC hardware/component news article "${source}" published ${rangeText}, and write the Facebook caption drafts as specified for each one.`;
+            const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate);
+            try{
+              const sourceItems = await fetchNewsBatch(systemPrompt, userPrompt);
+              items = items.concat(sourceItems);
+            }catch(err){
+              console.warn(`Search failed for source "${source}" (${rangeText}):`, err);
+              sourceErrors.push(`${source} (week of ${chunk.start.toDateString()})`);
+            }
+          }
+        }
+      } else {
+        // No sources configured — still chunk by week for thoroughness,
+        // just without the per-source nesting.
+        for(let wi = 0; wi < weekChunks.length; wi++){
+          const chunk = weekChunks[wi];
+          callIndex++;
+          if(callIndex > 1) await sleep(1500);
+          const rangeText = `from ${chunk.start.toDateString()} through ${chunk.end.toDateString()}`;
+          genLabel.innerHTML = `<span class="spinner"></span> Searching week ${wi + 1}/${weekChunks.length}…`;
+          setStatus(`Searching hardware news, ${rangeText}… (week ${wi + 1}/${weekChunks.length})`);
+          const scopeConstraint = `Search broadly across reputable tech hardware outlets. Find ALL relevant PC hardware/component news articles published ${rangeText}. Return every qualifying story from that window, not just the top one or two.`;
+          const userPrompt = `Find PC hardware/component news published ${rangeText} and write the Facebook caption drafts as specified. Return every distinct qualifying article from that window.`;
+          const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate);
+          try{
+            const weekItems = await fetchNewsBatch(systemPrompt, userPrompt);
+            items = items.concat(weekItems);
+          }catch(err){
+            console.warn(`Search failed for week ${rangeText}:`, err);
+            sourceErrors.push(`week of ${chunk.start.toDateString()}`);
+          }
         }
       }
     } else {
-      // Quick mode ("today", with or without a sources list) OR month mode
-      // with no sources configured (nothing to loop over) — one combined call.
-      setStatus(isMonth
-        ? `Searching this month's hardware news across reputable outlets…`
-        : `Fetching today's PC hardware/component news…`);
+      // Quick "today" mode — one combined call, fast, for daily checks.
+      setStatus(`Fetching today's PC hardware/component news…`);
+      const dateRangeText = `today, ${today.toDateString()}`;
       const scopeConstraint = sources.length > 0
-        ? `Only use these sources — search site-by-site if needed, and skip any story you can't attribute to one of them: ${sources.join(', ')}. Do not use any other outlet. Find PC hardware/component news published ${dateRangeText}.${sweepNote}`
-        : `Search broadly across reputable tech hardware outlets. Find PC hardware/component news published ${dateRangeText}.${sweepNote}`;
-      const userPrompt = isMonth
-        ? `Find this month's PC hardware/component news (${dateRangeText}) and write the Facebook caption drafts as specified. Return as many distinct qualifying articles from that period as you can find — don't stop at just a few.`
-        : `Find today's PC hardware/component news and write the Facebook caption drafts as specified. Today's date is ${today.toDateString()}.`;
+        ? `Only use these sources — search site-by-site if needed, and skip any story you can't attribute to one of them: ${sources.join(', ')}. Do not use any other outlet. Find PC hardware/component news published ${dateRangeText}.`
+        : `Search broadly across reputable tech hardware outlets. Find PC hardware/component news published ${dateRangeText}.`;
+      const userPrompt = `Find today's PC hardware/component news and write the Facebook caption drafts as specified. Today's date is ${today.toDateString()}.`;
       const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate);
       items = await fetchNewsBatch(systemPrompt, userPrompt);
     }
 
     if(items.length === 0){
       throw new Error(sourceErrors.length
-        ? `Could not get results from any source (${sourceErrors.join(', ')}).`
+        ? `Could not get results from any source/week (${sourceErrors.join(', ')}).`
         : `No news items came back${isMonth ? ' for this month' : ' for today'} — try again or widen your sources list.`);
     }
 
