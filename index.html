@@ -317,6 +317,7 @@
     .tabs{ margin-left: 0; }
     .controls{ flex-direction: column; align-items: stretch; }
     .tabs{ display:grid; grid-template-columns: repeat(4,1fr); }
+    #scanModeToggle{ display:grid; grid-template-columns: repeat(2,1fr); }
   }
 </style>
 </head>
@@ -357,6 +358,10 @@
   </div>
 
   <div class="controls">
+    <div class="tabs" id="scanModeToggle" style="margin-left:0;">
+      <button class="btn-ghost active" data-mode="today" title="Quick daily check — one combined search">Today</button>
+      <button class="btn-ghost" data-mode="month" title="Thorough sweep — searches each source separately for the whole month, takes longer">This Month</button>
+    </div>
     <button class="btn-primary" id="genBtn">
       <span id="genLabel">⚡ Generate drafts</span>
     </button>
@@ -378,21 +383,11 @@
 <script>
 let PAGE_NAME = "tpknows";
 
-// Load saved handle
-(async () => {
-  try {
-    const res = localStorage.getItem('page_handle');
-    if(res) PAGE_NAME = res;
-  } catch(e) {}
-  const inp = document.getElementById('handleInput');
-  if(inp) inp.value = PAGE_NAME;
-})();
-
 document.getElementById('saveHandleBtn').addEventListener('click', async () => {
   const val = document.getElementById('handleInput').value.trim().replace(/^@+/, '');
   if(!val) return;
   PAGE_NAME = val;
-  try { localStorage.setItem('page_handle', val); } catch(e) {}
+  await saveSettings();
   const saved = document.getElementById('handleSaved');
   saved.classList.add('show');
   setTimeout(() => saved.classList.remove('show'), 2000);
@@ -421,37 +416,61 @@ const syncBtn = document.getElementById('syncBtn');
 const syncLabel = document.getElementById('syncLabel');
 const statusLine = document.getElementById('statusLine');
 const tabs = document.getElementById('tabs');
+const scanModeToggle = document.getElementById('scanModeToggle');
+
+// 'today' = quick, one combined search (fast, for daily checks)
+// 'month' = thorough sweep — one search PER source across the whole month
+let scanMode = 'today';
+scanModeToggle.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-mode]');
+  if(!btn) return;
+  scanMode = btn.dataset.mode;
+  [...scanModeToggle.children].forEach(b => b.classList.toggle('active', b === btn));
+});
 
 function setStatus(msg, isError=false){
   statusLine.textContent = msg || '';
   statusLine.classList.toggle('error', !!isError);
 }
 
-async function loadDrafts(){
+async function loadAllFromSheet(){
   try{
-    const res = localStorage.getItem('drafts');
-    drafts = res ? JSON.parse(res) : [];
-  }catch(e){ drafts = []; }
-  render();
-}
-
-async function loadSources(){
-  try{
-    const res = localStorage.getItem('sources');
-    sources = res ? JSON.parse(res) : [...DEFAULT_SOURCES];
-  }catch(e){
+    const res = await fetch(`${SHEETS_SYNC_URL}?action=loadAll`);
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || 'Load failed');
+    drafts = data.drafts || [];
+    history_sessions = data.history || [];
+    sources = (data.settings && data.settings.sources && data.settings.sources.length)
+      ? data.settings.sources : [...DEFAULT_SOURCES];
+    PAGE_NAME = (data.settings && data.settings.pageHandle) || PAGE_NAME;
+    const inp = document.getElementById('handleInput');
+    if(inp) inp.value = PAGE_NAME;
+  }catch(err){
+    console.error('Load from Sheet failed:', err);
+    setStatus(`Could not load your data from Google Sheet: ${err.message || 'unknown error'}. Working with an empty set for now — avoid generating new drafts until this is fixed, or you may lose track of older ones.`, true);
+    drafts = [];
+    history_sessions = [];
     sources = [...DEFAULT_SOURCES];
   }
-  renderSources();
 }
 
-async function saveSources(){
+async function saveSettings(){
   try{
-    localStorage.setItem('sources', JSON.stringify(sources));
+    const res = await fetch(SHEETS_SYNC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'saveSettings', pageHandle: PAGE_NAME, sources })
+    });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || 'Save failed');
   }catch(e){
-    setStatus('Could not save sources list.', true);
+    console.error('saveSettings failed:', e);
+    setStatus(`Could not save settings to Google Sheet: ${e.message || 'unknown error'}`, true);
   }
 }
+// Alias so existing add/remove-source callers (which call saveSources())
+// don't need to change.
+async function saveSources(){ await saveSettings(); }
 
 function renderSources(){
   sourcesCount.textContent = `(${sources.length})`;
@@ -491,13 +510,13 @@ sourceInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preven
 sourcesHead.addEventListener('click', () => sourcesPanel.classList.toggle('collapsed'));
 
 
-async function saveDrafts(){
-  try{
-    localStorage.setItem('drafts', JSON.stringify(drafts));
-  }catch(e){
-    setStatus('Could not save — your last change may not persist.', true);
+async function saveDrafts(immediate = false){
+  if(immediate){
+    clearTimeout(sheetSyncTimer);
+    await syncToSheet(false);
+  } else {
+    scheduleSheetSync();
   }
-  scheduleSheetSync();
 }
 
 // ── Google Sheets sync ─────────────────────────────────────────
@@ -553,27 +572,11 @@ async function syncToSheet(manual){
 
 syncBtn.addEventListener('click', () => syncToSheet(true));
 
-async function loadHistory(){
-  try{
-    const res = localStorage.getItem('history_sessions');
-    history_sessions = res ? JSON.parse(res) : [];
-  }catch(e){ history_sessions = []; }
-}
-
-async function saveHistory(){
-  try{
-    // Keep last 50 sessions max
-    if(history_sessions.length > 50) history_sessions = history_sessions.slice(0, 50);
-    localStorage.setItem('history_sessions', JSON.stringify(history_sessions));
-  }catch(e){ console.warn('History save failed', e); }
-}
-
 async function addToHistory(newDrafts){
-  await loadHistory();
   const now = new Date();
   const label = now.toLocaleDateString('en-PH', { month:'short', day:'numeric', year:'numeric' })
     + ' · ' + now.toLocaleTimeString('en-PH', { hour:'2-digit', minute:'2-digit' });
-  // Store only lightweight data (no imageData blobs — too heavy)
+  // Store only lightweight data (no imageData blobs — too heavy for a Sheet cell)
   const lightDrafts = newDrafts.map(d => ({
     id: d.id,
     headline: d.headline,
@@ -581,13 +584,26 @@ async function addToHistory(newDrafts){
     url: d.url,
     category: d.category,
     caption: d.caption,
+    graphicCaption: d.graphicCaption,
     imageUrl: d.imageUrl,
-    status: d.status,
+    highlight_words: d.highlight_words,
     createdAt: d.createdAt,
   }));
   const session = { sessionId: `s_${now.getTime()}`, date: now.toISOString(), label, drafts: lightDrafts };
-  history_sessions.unshift(session);
-  await saveHistory();
+  history_sessions.unshift(session); // optimistic local update, followed immediately by render()
+
+  try{
+    const res = await fetch(SHEETS_SYNC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'syncHistorySession', session })
+    });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || 'History sync failed');
+  }catch(err){
+    console.error('History sync failed:', err);
+    setStatus(`Drafts added, but could not save to the History sheet: ${err.message || 'unknown error'}`, true);
+  }
 }
 
 function renderHistory(){
@@ -619,9 +635,20 @@ function renderHistory(){
   feed.querySelectorAll('.history-clear-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const si = parseInt(btn.dataset.session);
+      const session = history_sessions[si];
       history_sessions.splice(si, 1);
-      await saveHistory();
       renderHistory();
+      try{
+        const res = await fetch(SHEETS_SYNC_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'deleteHistorySession', sessionId: session.sessionId })
+        });
+        const data = await res.json();
+        if(!data.ok) throw new Error(data.error || 'Delete failed');
+      }catch(err){
+        setStatus(`Could not delete that session from Google Sheet: ${err.message || 'unknown error'}`, true);
+      }
     });
   });
 }
@@ -793,7 +820,7 @@ feed.addEventListener('click', async (e) => {
     try{
       const dataUrl = await fetchImageAsDataUrl(d.imageUrl);
       d.imageData = dataUrl;
-      await saveDrafts();
+      await saveDrafts(true);
       render();
       setStatus('');
     }catch(err){
@@ -808,7 +835,7 @@ feed.addEventListener('click', async (e) => {
       const prompt = await generateImagePrompt(d);
       d.imagePrompt = prompt;
       d.promptCopied = false;
-      await saveDrafts();
+      await saveDrafts(true);
     }catch(err){
       console.error(err);
       setStatus(`Could not generate an image prompt: ${err.message || 'unknown error'}`, true);
@@ -826,12 +853,12 @@ feed.addEventListener('click', async (e) => {
       setStatus('Clipboard blocked — select and copy the prompt manually.', true);
     }
   } else if(action === 'approve'){
-    d.status = 'approved'; await saveDrafts(); render();
+    d.status = 'approved'; await saveDrafts(true); render();
   } else if(action === 'posted'){
-    d.status = 'posted'; await saveDrafts(); render();
+    d.status = 'posted'; await saveDrafts(true); render();
   } else if(action === 'delete'){
     drafts = drafts.filter(x => x.id !== id);
-    await saveDrafts(); render();
+    await saveDrafts(true); render();
   }
 });
 
@@ -846,7 +873,7 @@ feed.addEventListener('change', async (e) => {
     try{
       const dataUrl = await compressImage(file, 1080, 0.85);
       d.imageData = dataUrl;
-      await saveDrafts();
+      await saveDrafts(true);
       render();
       setStatus('');
     }catch(err){
@@ -1325,29 +1352,16 @@ tabs.addEventListener('click', async (e) => {
   currentFilter = btn.dataset.filter;
   [...tabs.children].forEach(b => b.classList.toggle('active', b === btn));
   if(currentFilter === 'history'){
-    await loadHistory();
     renderHistory();
   } else {
     render();
   }
 });
 
-async function generateDrafts(){
-  genBtn.disabled = true;
-  genLabel.innerHTML = '<span class="spinner"></span> Searching for news…';
-  setStatus('Fetching recent PC hardware/component news…');
-
-  const usdToPhpRate = await getUsdToPhpRate();
-
-  const sourceConstraint = sources.length > 0
-    ? `Only use these sources — search site-by-site if needed, and skip any story you can't attribute to one of them: ${sources.join(', ')}. Do not use any other outlet.`
-    : `Search broadly across reputable tech hardware outlets.`;
-
-  const systemPrompt = `You are the voice behind "${PAGE_NAME}" — a Filipino tech page run by someone who actually knows hardware inside-out: a builder, a repair tech, and a sharp observer of the industry. You write Facebook captions that sound like they came from the smartest, wittiest person in the room who also happens to explain things better than most tech journalists.
-
-${sourceConstraint}
-
-For each news item, write TWO captions in the same voice — one short for the image graphic, one longer and more detailed for the actual Facebook feed post:
+// Shared writing-style / JSON-schema instructions used for every batch call,
+// whether it's a broad search or a single-source scoped search.
+function buildCaptionInstructions(usdToPhpRate){
+  return `For each news item, write TWO captions in the same voice — one short for the image graphic, one longer and more detailed for the actual Facebook feed post:
 
 Both should be:
 - INTELLECTUALLY SHARP — show real understanding of WHY this matters. Connect the dots. Reference context (architecture generations, market positioning, historical comparisons, what this means for builders or buyers). Sound like someone who has built hundreds of PCs and read every spec sheet.
@@ -1382,49 +1396,129 @@ CRITICAL — "url" FIELD RULES:
 
 Respond with ONLY a raw JSON array (no markdown fences, no commentary) where each item has exactly these fields:
 [{"headline": "...", "source": "publication name", "url": "the exact direct article URL, or empty string if unknown — never the homepage", "image_url": "direct URL to the article's main/hero image if you can identify one, otherwise empty string", "category": "GPU|CPU|Storage|Motherboard|Peripherals|Cooling|PSU|General", "caption_graphic": "the short caption for the image graphic", "caption_feed": "the longer, more detailed caption for the Facebook feed post", "highlight_words": ["1-3 key words or short product names from the headline to visually emphasize, e.g. product names, brand names, or standout numbers"]}]`;
+}
+
+function buildSystemPrompt(scopeConstraint, usdToPhpRate){
+  return `You are the voice behind "${PAGE_NAME}" — a Filipino tech page run by someone who actually knows hardware inside-out: a builder, a repair tech, and a sharp observer of the industry. You write Facebook captions that sound like they came from the smartest, wittiest person in the room who also happens to explain things better than most tech journalists.
+
+${scopeConstraint}
+
+${buildCaptionInstructions(usdToPhpRate)}`;
+}
+
+// Calls the proxy once with a given system/user prompt pair and returns the
+// parsed items array. Throws on hard failures (bad API response, unparsable
+// JSON) — but an empty array is a valid, non-error result (e.g. a single
+// source simply had nothing new this month).
+async function fetchNewsBatch(systemPrompt, userPrompt){
+  const response = await fetch(PROXY_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ systemPrompt, prompt: userPrompt })
+  });
+
+  if(!response.ok){
+    let detail = '';
+    try{ detail = (await response.json()).error || ''; }catch(e){}
+    throw new Error(`API error ${response.status}${detail ? ': ' + detail : ''}`);
+  }
+
+  const data = await response.json();
+  if(data.error) throw new Error(data.error);
+
+  const text = data.text || '';
+  if(!text.trim()){
+    throw new Error('No response from AI — please try again.');
+  }
+
+  const cleaned = text.replace(/```json|```/g, '').trim();
+  const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
+  if(!jsonMatch) throw new Error('Response did not contain valid JSON — it may have been cut off.');
+
+  let items;
+  try{
+    items = JSON.parse(jsonMatch[0]);
+  }catch(parseErr){
+    throw new Error('Could not parse the response JSON (likely truncated). Try again.');
+  }
+  return Array.isArray(items) ? items : [];
+}
+
+async function generateDrafts(){
+  genBtn.disabled = true;
+  genLabel.innerHTML = '<span class="spinner"></span> Searching for news…';
+
+  const usdToPhpRate = await getUsdToPhpRate();
+  const isMonth = scanMode === 'month';
+
+  const today = new Date();
+  const dateRangeText = isMonth
+    ? `from ${new Date(today.getFullYear(), today.getMonth(), 1).toDateString()} through today, ${today.toDateString()}`
+    : `today, ${today.toDateString()}`;
+  const sweepNote = isMonth
+    ? ` This is a full-month sweep, not just today's news — return every qualifying story you can find from that window, not just the most recent one or two.`
+    : '';
+
+  let items = [];
+  const sourceErrors = [];
 
   try{
-    setStatus('Searching recent hardware news…');
+    if(isMonth && sources.length > 0){
+      // Thorough mode: one call PER source so each outlet gets a real
+      // full-month sweep instead of being crowded out in a single search.
+      for(let i = 0; i < sources.length; i++){
+        const source = sources[i];
+        genLabel.innerHTML = `<span class="spinner"></span> Searching ${source}… (${i + 1}/${sources.length})`;
+        setStatus(`Searching ${source} for this month's news… (${i + 1}/${sources.length})`);
+        const scopeConstraint = `Only use this one source: ${source}. Do not use any other outlet. Find ALL relevant PC hardware/component news articles this specific outlet published ${dateRangeText}.${sweepNote} If they published 10 relevant stories this month, return all 10, not just the newest one or two.`;
+        const userPrompt = `Find every PC hardware/component news article "${source}" published ${dateRangeText}, and write the Facebook caption drafts as specified for each one.`;
+        const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate);
+        try{
+          const sourceItems = await fetchNewsBatch(systemPrompt, userPrompt);
+          items = items.concat(sourceItems);
+        }catch(err){
+          console.warn(`Search failed for source "${source}":`, err);
+          sourceErrors.push(source);
+        }
+      }
+    } else {
+      // Quick mode ("today", with or without a sources list) OR month mode
+      // with no sources configured (nothing to loop over) — one combined call.
+      setStatus(isMonth
+        ? `Searching this month's hardware news across reputable outlets…`
+        : `Fetching today's PC hardware/component news…`);
+      const scopeConstraint = sources.length > 0
+        ? `Only use these sources — search site-by-site if needed, and skip any story you can't attribute to one of them: ${sources.join(', ')}. Do not use any other outlet. Find PC hardware/component news published ${dateRangeText}.${sweepNote}`
+        : `Search broadly across reputable tech hardware outlets. Find PC hardware/component news published ${dateRangeText}.${sweepNote}`;
+      const userPrompt = isMonth
+        ? `Find this month's PC hardware/component news (${dateRangeText}) and write the Facebook caption drafts as specified. Return as many distinct qualifying articles from that period as you can find — don't stop at just a few.`
+        : `Find today's PC hardware/component news and write the Facebook caption drafts as specified. Today's date is ${today.toDateString()}.`;
+      const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate);
+      items = await fetchNewsBatch(systemPrompt, userPrompt);
+    }
 
-    const response = await fetch(PROXY_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemPrompt,
-        prompt: "Find today's PC hardware/component news and write the Facebook caption drafts as specified. Today's date is " + new Date().toDateString() + "."
-      })
+    if(items.length === 0){
+      throw new Error(sourceErrors.length
+        ? `Could not get results from any source (${sourceErrors.join(', ')}).`
+        : `No news items came back${isMonth ? ' for this month' : ' for today'} — try again or widen your sources list.`);
+    }
+
+    // Skip anything already in your current drafts OR already seen in past
+    // History sessions — same article URL, or a headline that's basically
+    // the same story worded differently. Checking History too means a
+    // month-long sweep won't keep re-adding stories you already processed
+    // and deleted earlier.
+    const historyUrls = new Set();
+    const historyHeadlines = new Set();
+    history_sessions.forEach(session => {
+      (session.drafts || []).forEach(d => {
+        if(d.url) historyUrls.add(d.url.trim().toLowerCase());
+        if(d.headline) historyHeadlines.add(normalizeForDupe(d.headline));
+      });
     });
 
-    if(!response.ok){
-      let detail = '';
-      try{ detail = (await response.json()).error || ''; }catch(e){}
-      throw new Error(`API error ${response.status}${detail ? ': ' + detail : ''}`);
-    }
-
-    const data = await response.json();
-    if(data.error) throw new Error(data.error);
-
-    const text = data.text || '';
-    if(!text.trim()){
-      throw new Error('No response from AI — please try again.');
-    }
-
-    const cleaned = text.replace(/```json|```/g, '').trim();
-    const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
-    if(!jsonMatch) throw new Error('Response did not contain valid JSON — it may have been cut off.');
-
-    let items;
-    try{
-      items = JSON.parse(jsonMatch[0]);
-    }catch(parseErr){
-      throw new Error('Could not parse the response JSON (likely truncated). Try again.');
-    }
-    if(!Array.isArray(items) || items.length === 0) throw new Error('No news items came back — try again or widen your sources list.');
-
-    // Skip anything that's already in your current drafts — same article
-    // URL, or a headline that's basically the same story worded differently.
-    const existingUrls = new Set(drafts.filter(d => d.url).map(d => d.url.trim().toLowerCase()));
-    const existingHeadlines = new Set(drafts.map(d => normalizeForDupe(d.headline)));
+    const existingUrls = new Set([...drafts.filter(d => d.url).map(d => d.url.trim().toLowerCase()), ...historyUrls]);
+    const existingHeadlines = new Set([...drafts.map(d => normalizeForDupe(d.headline)), ...historyHeadlines]);
     const seenInBatchUrls = new Set();
     const seenInBatchHeadlines = new Set();
     let duplicatesSkipped = 0;
@@ -1480,7 +1574,7 @@ Respond with ONLY a raw JSON array (no markdown fences, no commentary) where eac
     });
 
     drafts = [...newDrafts, ...drafts];
-    await saveDrafts();
+    await saveDrafts(true);
     if(newDrafts.length > 0) await addToHistory(newDrafts); // auto-save every generation to history
     currentFilter = 'all';
     [...tabs.children].forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
@@ -1488,10 +1582,11 @@ Respond with ONLY a raw JSON array (no markdown fences, no commentary) where eac
     if(newDrafts.length > 0) autoFetchPhotos(newDrafts); // background, non-blocking — fills in imageData as each resolves
 
     const notes = [];
-    if(duplicatesSkipped) notes.push(`skipped ${duplicatesSkipped} duplicate${duplicatesSkipped === 1 ? '' : 's'} already in your drafts`);
+    if(duplicatesSkipped) notes.push(`skipped ${duplicatesSkipped} duplicate${duplicatesSkipped === 1 ? '' : 's'} already in your drafts or history`);
     if(homepageUrlsDropped) notes.push(`${homepageUrlsDropped} had no exact article link — source omitted`);
+    if(sourceErrors.length) notes.push(`could not search ${sourceErrors.join(', ')}`);
     const noteText = notes.length ? ` (${notes.join('; ')}.)` : '';
-    setStatus(`Added ${newDrafts.length} new draft${newDrafts.length === 1 ? '' : 's'}.${noteText}`);
+    setStatus(`Added ${newDrafts.length} new draft${newDrafts.length === 1 ? '' : 's'}${isMonth ? " from this month's sweep" : ''}.${noteText}`);
 
   }catch(err){
     console.error(err);
@@ -1504,8 +1599,15 @@ Respond with ONLY a raw JSON array (no markdown fences, no commentary) where eac
 
 genBtn.addEventListener('click', generateDrafts);
 
-loadDrafts();
-loadSources();
+(async () => {
+  setStatus('Loading your drafts and settings from Google Sheet…');
+  await loadAllFromSheet();
+  const inp = document.getElementById('handleInput');
+  if(inp) inp.value = PAGE_NAME;
+  renderSources();
+  render();
+  setStatus('');
+})();
 </script>
 
 </body>
