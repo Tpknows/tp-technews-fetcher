@@ -956,6 +956,46 @@ function isHomepageUrl(url){
   }
 }
 
+// Known outlets get a proper display name; anything else falls back to a
+// cleaned-up version of the hostname itself.
+const KNOWN_SOURCE_DOMAINS = {
+  'tomshardware.com': "Tom's Hardware",
+  'videocardz.com': 'Videocardz',
+  'techpowerup.com': 'TechPowerUp',
+  'wccftech.com': 'Wccftech',
+  'notebookcheck.net': 'Notebookcheck',
+  'yugatech.com': 'YugaTech'
+};
+
+function getHostname(url){
+  try{
+    return new URL(url).hostname.replace(/^www\./i, '').toLowerCase();
+  }catch(e){
+    return '';
+  }
+}
+
+function friendlyNameForHostname(hostname){
+  if(!hostname) return '';
+  if(KNOWN_SOURCE_DOMAINS[hostname]) return KNOWN_SOURCE_DOMAINS[hostname];
+  const base = hostname.replace(/\.(com|net|org|ph|co|io|info|tech|news)$/i, '');
+  return base.split(/[-.]/).filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+// The AI sometimes mislabels which outlet a story came from — especially
+// in per-source scoped searches where it's told "only use source X" but
+// the underlying search still surfaces a link from a different domain.
+// Rather than trust the model's self-reported "source" string, we derive
+// the displayed source name from the actual URL's domain, so what's shown
+// always matches where the link actually goes.
+function correctSourceFromUrl(item){
+  if(!item.url) return item;
+  const hostname = getHostname(item.url);
+  const derived = friendlyNameForHostname(hostname);
+  if(derived) item.source = derived;
+  return item;
+}
+
 function fetchImageAsDataUrl(url){
   return new Promise((resolve, reject) => {
     if(!url){ reject(new Error('No image URL')); return; }
@@ -1606,6 +1646,11 @@ async function generateDrafts(){
         ? `Could not get results from any source/week (${sourceErrors.join(', ')}).`
         : `No news items came back${isMonth ? ' for this month' : ' for today'} — try again or widen your sources list.`);
     }
+
+    // Trust the URL's real domain over whatever "source" name the AI
+    // reported — fixes cases where it says "Videocardz" but the link
+    // actually points somewhere else.
+    items.forEach(correctSourceFromUrl);
 
     // Skip anything already in your current drafts OR already seen in past
     // History sessions — same article URL, or a headline that's basically
