@@ -1753,7 +1753,8 @@ function drawGraphicBand(d){
     const headlineFontName = (d.fontFamily || 'Anton, sans-serif').split(',')[0].trim();
     Promise.all([
       document.fonts.load(`400 60px ${headlineFontName}`),
-      document.fonts.load('600 26px "IBM Plex Mono"')
+      document.fonts.load('600 26px "IBM Plex Mono"'),
+      document.fonts.load(`700 24px ${headlineFontName}`)
     ]).catch(() => {}).then(() => {
 
       const finishDraw = (photoImg) => {
@@ -1784,7 +1785,7 @@ function drawGraphicBand(d){
         });
         const capH = capLines.length * LINE_H_CAP;
 
-        ctx.font = `600 ${HANDLE_SIZE}px "IBM Plex Mono", monospace`;
+        ctx.font = `700 ${HANDLE_SIZE}px ${d.fontFamily || 'Anton, sans-serif'}`;
         const handleH = HANDLE_SIZE + 34; // plain handle text height + gap before caption
 
         const stripH = INNER_PAD_TOP + handleH + capH + INNER_PAD_BOT;
@@ -1845,7 +1846,7 @@ function drawGraphicBand(d){
         // ── @handle, plain bold text, centered, no pill/border ──
         // (a boxed pill on a flat background reads as a pasted-on sticker;
         // plain type sits naturally as part of the layout instead)
-        ctx.font = `700 ${HANDLE_SIZE}px "IBM Plex Mono", monospace`;
+        ctx.font = `700 ${HANDLE_SIZE}px ${d.fontFamily || 'Anton, sans-serif'}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'alphabetic';
         const handle = activeTemplate ? `@${activeTemplate.handle.toLowerCase().replace(/\s+/g,'')}` : (PAGE_NAME ? `@${PAGE_NAME.toLowerCase().replace(/\s+/g,'')}` : '@tpknows');
@@ -1892,7 +1893,8 @@ function drawGraphicOverlay(d){
     const headlineFontName = (d.fontFamily || 'Anton, sans-serif').split(',')[0].trim();
     Promise.all([
       document.fonts.load(`400 60px ${headlineFontName}`),
-      document.fonts.load('700 22px "IBM Plex Mono"')
+      document.fonts.load('700 22px "IBM Plex Mono"'),
+      document.fonts.load(`700 24px ${headlineFontName}`)
     ]).catch(() => {}).then(() => {
 
       const finishDraw = (photoImg) => {
@@ -2004,7 +2006,7 @@ function drawGraphicOverlay(d){
 
         // @handle watermark, bottom-right — stands in for a logo since
         // there's no actual logo image to place here.
-        ctx.font = `700 ${HANDLE_SIZE}px "IBM Plex Mono", monospace`;
+        ctx.font = `700 ${HANDLE_SIZE}px ${d.fontFamily || 'Anton, sans-serif'}`;
         ctx.textAlign = 'right';
         ctx.textBaseline = 'alphabetic';
         const handle = activeTemplate ? `@${activeTemplate.handle.toLowerCase().replace(/\s+/g,'')}` : (PAGE_NAME ? `@${PAGE_NAME.toLowerCase().replace(/\s+/g,'')}` : '@tpknows');
