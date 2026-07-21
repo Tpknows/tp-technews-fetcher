@@ -311,6 +311,17 @@
     margin-bottom: 10px;
   }
   .graphic-canvas-wrap canvas{ width: 100%; height: auto; display: block; }
+  .image-position-controls{
+    max-width: 320px; margin-bottom: 12px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .image-position-row{ display:flex; align-items:center; gap:10px; }
+  .image-position-row label{
+    font-size: 11.5px; color: var(--text-dim); white-space: nowrap; width: 76px; flex-shrink: 0;
+  }
+  .image-position-row input[type="range"]{
+    flex: 1; accent-color: var(--trace); cursor: pointer;
+  }
   .graphic-empty{
     aspect-ratio: 4/5; display:flex; align-items:center; justify-content:center;
     color: var(--text-dim); font-size: 12px; text-align:center; padding: 20px;
@@ -858,6 +869,18 @@ function render(){
           <div class="graphic-canvas-wrap" id="canvasWrap-${d.id}">
             <canvas id="canvas-${d.id}" width="1080" height="1080"></canvas>
           </div>
+          ${d.imageData ? `
+          <div class="image-position-controls">
+            <div class="image-position-row">
+              <label>↔ Horizontal</label>
+              <input type="range" min="0" max="100" value="${Math.round((d.imageOffsetX != null ? d.imageOffsetX : 0.5) * 100)}" class="image-offset-x" data-id="${d.id}">
+            </div>
+            <div class="image-position-row">
+              <label>↕ Vertical</label>
+              <input type="range" min="0" max="100" value="${Math.round((d.imageOffsetY != null ? d.imageOffsetY : 0.5) * 100)}" class="image-offset-y" data-id="${d.id}">
+            </div>
+          </div>
+          ` : ''}
           <div class="graphic-controls">
             <label class="file-btn">📷 ${d.imageData ? 'Replace with real photo' : 'Use a real photo instead'}
               <input type="file" accept="image/*" class="photo-input" data-id="${d.id}">
@@ -907,6 +930,22 @@ feed.addEventListener('input', (e) => {
       saveDrafts();
       drawGraphic(d); // live-update the tag shown on the graphic
     }
+  } else if(e.target.classList.contains('image-offset-x')){
+    const id = e.target.dataset.id;
+    const d = drafts.find(x => x.id === id);
+    if(d){
+      d.imageOffsetX = parseInt(e.target.value, 10) / 100;
+      saveDrafts();
+      drawGraphic(d); // live re-crop, no full re-render (would reset the slider mid-drag)
+    }
+  } else if(e.target.classList.contains('image-offset-y')){
+    const id = e.target.dataset.id;
+    const d = drafts.find(x => x.id === id);
+    if(d){
+      d.imageOffsetY = parseInt(e.target.value, 10) / 100;
+      saveDrafts();
+      drawGraphic(d);
+    }
   }
 });
 
@@ -954,6 +993,8 @@ feed.addEventListener('click', async (e) => {
     try{
       const dataUrl = await fetchImageAsDataUrl(d.imageUrl);
       d.imageData = dataUrl;
+      d.imageOffsetX = 0.5;
+      d.imageOffsetY = 0.5;
       await saveDrafts(true);
       render();
       setStatus('');
@@ -1007,6 +1048,8 @@ feed.addEventListener('change', async (e) => {
     try{
       const dataUrl = await compressImage(file, 1080, 0.85);
       d.imageData = dataUrl;
+      d.imageOffsetX = 0.5;
+      d.imageOffsetY = 0.5;
       await saveDrafts(true);
       render();
       setStatus('');
@@ -1491,10 +1534,12 @@ function drawGraphicBand(d){
         ctx.fillRect(0, 0, W, H);
 
         if(photoImg){
-          // ── Draw real photo (top, cover-fit) ─────────────────
+          // ── Draw real photo (top, cover-fit, adjustable crop position) ─
           const scale = Math.max(W / photoImg.width, imgAreaH / photoImg.height);
           const iw = photoImg.width * scale, ih = photoImg.height * scale;
-          const ix = (W - iw) / 2, iy = (imgAreaH - ih) / 2;
+          const offsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
+          const offsetY = d.imageOffsetY != null ? d.imageOffsetY : 0.5;
+          const ix = (W - iw) * offsetX, iy = (imgAreaH - ih) * offsetY;
           ctx.save();
           ctx.beginPath();
           ctx.rect(0, 0, W, imgAreaH);
@@ -1585,11 +1630,13 @@ function drawGraphicOverlay(d){
         const tagLabel = (d.categoryLabel || d.category || 'NEWS').toUpperCase();
         const tagStyle = getCategoryStyle(d.category);
 
-        // ── Photo fills the ENTIRE canvas (cover-fit) ───────────
+        // ── Photo fills the ENTIRE canvas (cover-fit, adjustable crop) ──
         if(photoImg){
           const scale = Math.max(W / photoImg.width, H / photoImg.height);
           const iw = photoImg.width * scale, ih = photoImg.height * scale;
-          const ix = (W - iw) / 2, iy = (H - ih) / 2;
+          const offsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
+          const offsetY = d.imageOffsetY != null ? d.imageOffsetY : 0.5;
+          const ix = (W - iw) * offsetX, iy = (H - ih) * offsetY;
           ctx.drawImage(photoImg, ix, iy, iw, ih);
         } else {
           drawCategoryBackground(ctx, W, H, d.category);
