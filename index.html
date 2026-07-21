@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TP - Tech News Drafts</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Anton&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Anton&family=Bebas+Neue&family=Oswald:wght@600;700&display=swap');
 
   :root{
     --bg: #14151d;
@@ -370,6 +370,13 @@
           <button class="btn-ghost" data-style="overlay" title="Text directly over the photo with a dark gradient">Photo Overlay</button>
         </div>
       </div>
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+        <span style="font-size:12.5px; color:var(--text-dim); white-space:nowrap;">Overlay text align:</span>
+        <div class="tabs" id="overlayAlignToggle" style="margin-left:0;">
+          <button class="btn-ghost active" data-align="left" title="Headline left-aligned, boxed at the bottom-left">Left</button>
+          <button class="btn-ghost" data-align="center" title="Headline centered, boxed in the middle">Center</button>
+        </div>
+      </div>
       <div id="templateList"></div>
       <div class="template-add-row">
         <input type="text" id="templateNameInput" placeholder="Page name (e.g. TP Knows)" maxlength="40">
@@ -503,6 +510,28 @@ document.getElementById('templatesHead').addEventListener('click', () => templat
 // Global graphic style: 'band' (photo on top, light band + centered caption
 // below) or 'overlay' (text directly over the photo with a dark gradient,
 // left-aligned, category tag pill, @handle watermark bottom-right).
+// Headline font choices for the graphic — all preloaded via the @import
+// at the top of the page. Value is the exact CSS font-family string passed
+// straight into fitCaptionFont/canvas ctx.font.
+// Quick tag-color presets — matches the common macro-category coloring
+// used by tech news pages (gray Hardware, green Gaming, gold AI, etc.),
+// separate from our own GPU/CPU/... component categories so the label
+// and pill color can be set freely to whatever fits the story.
+const TAG_COLOR_PRESETS = [
+  { label: 'Hardware', color: '#c9955c' },
+  { label: 'Gaming', color: '#8577b3' },
+  { label: 'AI', color: '#5cb3a3' },
+  { label: 'Software', color: '#6b8cba' },
+  { label: 'News', color: '#c97a86' }
+];
+
+const FONT_OPTIONS = [
+  { value: 'Anton, sans-serif', label: 'Anton (default)' },
+  { value: '"Bebas Neue", sans-serif', label: 'Bebas Neue' },
+  { value: 'Oswald, sans-serif', label: 'Oswald' },
+  { value: 'Sora, sans-serif', label: 'Sora' }
+];
+
 let graphicStyle = 'band';
 document.getElementById('graphicStyleToggle').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-style]');
@@ -510,6 +539,19 @@ document.getElementById('graphicStyleToggle').addEventListener('click', (e) => {
   graphicStyle = btn.dataset.style;
   [...document.getElementById('graphicStyleToggle').children].forEach(b => b.classList.toggle('active', b === btn));
   render(); // redraw all visible graphics in the new style
+});
+
+// Overlay style only: where the headline text sits — left-aligned & boxed
+// bottom-left (original layout) or centered & boxed in the middle of the
+// scrim, so long headlines stay contained instead of running past the
+// intended text area.
+let overlayAlign = 'left';
+document.getElementById('overlayAlignToggle').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-align]');
+  if(!btn) return;
+  overlayAlign = btn.dataset.align;
+  [...document.getElementById('overlayAlignToggle').children].forEach(b => b.classList.toggle('active', b === btn));
+  render();
 });
 
 let drafts = [];
@@ -901,13 +943,30 @@ function render(){
         <p class="source-line">${escapeHtml(d.source || '')}${d.url ? ` · <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">source ↗</a>` : ''}</p>
         <span class="graphic-label" style="margin-top:10px;">Caption for graphic (text on image)</span>
         <textarea data-id="${d.id}" class="graphic-caption-input" style="margin-bottom:12px;">${escapeHtml(d.graphicCaption != null ? d.graphicCaption : d.caption)}</textarea>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
+          <label style="font-size:12px; color:var(--text-dim); white-space:nowrap;">Font
+            <select data-id="${d.id}" class="graphic-font-select" style="margin-left:6px; background:var(--panel-2); border:1px solid var(--line); border-radius:7px; color:var(--text); font-size:13px; padding:6px 8px;">
+              ${FONT_OPTIONS.map(f => `<option value="${f.value}" ${(d.fontFamily || FONT_OPTIONS[0].value) === f.value ? 'selected' : ''}>${f.label}</option>`).join('')}
+            </select>
+          </label>
+          <label style="font-size:12px; color:var(--text-dim); white-space:nowrap;">Size
+            <input type="number" data-id="${d.id}" class="graphic-font-size" min="18" max="90" placeholder="Auto" value="${d.fontSizeOverride || ''}" style="width:64px; margin-left:6px; background:var(--panel-2); border:1px solid var(--line); border-radius:7px; color:var(--text); font-size:13px; padding:6px 8px;">
+          </label>
+          ${d.fontSizeOverride ? `<button class="mini-btn" data-action="reset-font-size" data-id="${d.id}" style="font-size:12px;">Reset to auto</button>` : ''}
+        </div>
         <span class="graphic-label">Caption for Facebook post/feed</span>
         <textarea data-id="${d.id}" class="caption-input">${escapeHtml(d.caption)}</textarea>
         <div class="graphic-block">
           <span class="graphic-label">Post graphic</span>
           ${graphicStyle === 'overlay' ? `
           <span class="graphic-label" style="margin-top:0;">Category tag (shown on the photo)</span>
-          <input type="text" data-id="${d.id}" class="category-label-input" value="${escapeHtml(d.categoryLabel || d.category || '')}" maxlength="24" style="width:100%; margin-bottom:12px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:'Sora',sans-serif; font-size:13px; padding:9px 11px;">
+          <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+            <input type="text" data-id="${d.id}" class="category-label-input" value="${escapeHtml(d.categoryLabel || d.category || '')}" maxlength="24" style="flex:1; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:'Sora',sans-serif; font-size:13px; padding:9px 11px;">
+            <input type="color" data-id="${d.id}" class="tag-color-input" value="${d.tagColor || getCategoryStyle(d.category).color}" title="Tag pill color" style="width:38px; height:38px; padding:2px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; cursor:pointer;">
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap; margin:-6px 0 12px;">
+            ${TAG_COLOR_PRESETS.map(p => `<button type="button" class="mini-btn tag-color-preset" data-action="tag-color-preset" data-id="${d.id}" data-color="${p.color}" data-label="${p.label}" style="font-size:11px; padding:4px 9px; display:flex; align-items:center; gap:5px;"><span style="width:9px; height:9px; border-radius:50%; background:${p.color}; display:inline-block;"></span>${p.label}</button>`).join('')}
+          </div>
           ` : ''}
           <div class="graphic-canvas-wrap" id="canvasWrap-${d.id}">
             <canvas id="canvas-${d.id}" width="1080" height="1080"></canvas>
@@ -973,6 +1032,14 @@ feed.addEventListener('input', (e) => {
       saveDrafts();
       drawGraphic(d); // live-update the tag shown on the graphic
     }
+  } else if(e.target.classList.contains('tag-color-input')){
+    const id = e.target.dataset.id;
+    const d = drafts.find(x => x.id === id);
+    if(d){
+      d.tagColor = e.target.value;
+      saveDrafts();
+      drawGraphic(d); // live-update the tag pill color
+    }
   } else if(e.target.classList.contains('image-offset-x')){
     const id = e.target.dataset.id;
     const d = drafts.find(x => x.id === id);
@@ -989,6 +1056,15 @@ feed.addEventListener('input', (e) => {
       saveDrafts();
       drawGraphic(d);
     }
+  } else if(e.target.classList.contains('graphic-font-size')){
+    const id = e.target.dataset.id;
+    const d = drafts.find(x => x.id === id);
+    if(d){
+      const val = parseInt(e.target.value, 10);
+      d.fontSizeOverride = (e.target.value === '' || isNaN(val)) ? null : Math.max(18, Math.min(90, val));
+      saveDrafts();
+      drawGraphic(d); // live re-render at the manual size; button re-renders on next full render()
+    }
   }
 });
 
@@ -1000,7 +1076,16 @@ feed.addEventListener('click', async (e) => {
   if(!d) return;
   const action = btn.dataset.action;
 
-  if(action === 'copy'){
+  if(action === 'tag-color-preset'){
+    d.categoryLabel = btn.dataset.label;
+    d.tagColor = btn.dataset.color;
+    saveDrafts();
+    render(); // full render so the text input + color swatch reflect the preset
+  } else if(action === 'reset-font-size'){
+    d.fontSizeOverride = null;
+    saveDrafts();
+    render(); // full render so the "Reset to auto" button disappears
+  } else if(action === 'copy'){
     try{
       await navigator.clipboard.writeText(d.caption);
       btn.textContent = 'Copied ✓';
@@ -1081,6 +1166,16 @@ feed.addEventListener('click', async (e) => {
 });
 
 feed.addEventListener('change', async (e) => {
+  if(e.target.classList.contains('graphic-font-select')){
+    const id = e.target.dataset.id;
+    const d = drafts.find(x => x.id === id);
+    if(d){
+      d.fontFamily = e.target.value;
+      saveDrafts();
+      drawGraphic(d); // live re-render with the new font
+    }
+    return;
+  }
   if(e.target.classList.contains('photo-input')){
     const id = e.target.dataset.id;
     const file = e.target.files[0];
@@ -1519,8 +1614,19 @@ function fitCaptionFont(ctx, text, opts){
   const {
     maxWidth, maxHeight, maxFontSize, minFontSize,
     fontWeight = '400', fontFamily = 'Anton, sans-serif',
-    lineHeightRatio = 1.16, maxLines = 5
+    lineHeightRatio = 1.16, maxLines = 5, sizeOverride = null
   } = opts;
+
+  // Manual override — skip auto-fit entirely and just wrap at the
+  // requested size (the user has explicitly chosen this, so we don't
+  // second-guess it with maxHeight/maxLines shrinking).
+  if(sizeOverride){
+    const fontSize = sizeOverride;
+    ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+    const lines = wrapWordsBalanced(ctx, text, maxWidth);
+    const lineH = Math.round(fontSize * lineHeightRatio);
+    return { fontSize, lineH, lines };
+  }
 
   let fontSize = maxFontSize;
   let lines = [], lineH = 0;
@@ -1644,8 +1750,9 @@ function drawGraphicBand(d){
     const ctx = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height; // 1080 x 1080
 
+    const headlineFontName = (d.fontFamily || 'Anton, sans-serif').split(',')[0].trim();
     Promise.all([
-      document.fonts.load('400 60px Anton'),
+      document.fonts.load(`400 60px ${headlineFontName}`),
       document.fonts.load('600 26px "IBM Plex Mono"')
     ]).catch(() => {}).then(() => {
 
@@ -1671,8 +1778,9 @@ function drawGraphicBand(d){
           maxHeight: H * 0.34,
           maxFontSize: 58,
           minFontSize: 30,
-          fontFamily: 'Anton, sans-serif',
-          maxLines: 4
+          fontFamily: d.fontFamily || 'Anton, sans-serif',
+          maxLines: 4,
+          sizeOverride: d.fontSizeOverride || null
         });
         const capH = capLines.length * LINE_H_CAP;
 
@@ -1749,7 +1857,7 @@ function drawGraphicBand(d){
         // ── Big bold condensed caption, centered, highlighted words
         // in the app's green accent, rest in near-black ────────────
         let ty = handleTextY + 34 + CAPTION_SIZE * 0.85;
-        ctx.font = `400 ${CAPTION_SIZE}px Anton, sans-serif`;
+        ctx.font = `400 ${CAPTION_SIZE}px ${d.fontFamily || 'Anton, sans-serif'}`;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'alphabetic';
         drawCenteredHighlightedLines(ctx, capLines, d.highlight_words, W / 2, ty, LINE_H_CAP, TEXT_DARK, HIGHLIGHT_COLOR);
@@ -1781,8 +1889,9 @@ function drawGraphicOverlay(d){
     const ctx = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height; // 1080 x 1080
 
+    const headlineFontName = (d.fontFamily || 'Anton, sans-serif').split(',')[0].trim();
     Promise.all([
-      document.fonts.load('400 60px Anton'),
+      document.fonts.load(`400 60px ${headlineFontName}`),
       document.fonts.load('700 22px "IBM Plex Mono"')
     ]).catch(() => {}).then(() => {
 
@@ -1808,8 +1917,9 @@ function drawGraphicOverlay(d){
           maxHeight: H * 0.4,
           maxFontSize: 56,
           minFontSize: 28,
-          fontFamily: 'Anton, sans-serif',
-          maxLines: 5
+          fontFamily: d.fontFamily || 'Anton, sans-serif',
+          maxLines: 5,
+          sizeOverride: d.fontSizeOverride || null
         });
         const capH = capLines.length * LINE_H_CAP;
 
@@ -1853,37 +1963,44 @@ function drawGraphicOverlay(d){
 
         // Category tag pill
         ctx.font = `700 ${TAG_SIZE}px "IBM Plex Mono", monospace`;
-        ctx.textAlign = 'left';
+        ctx.textAlign = overlayAlign === 'center' ? 'center' : 'left';
         ctx.textBaseline = 'middle';
         const tagPadX = 16, tagPadY = 10;
         const tagTextWidth = ctx.measureText(tagLabel).width;
         const tagW = tagTextWidth + tagPadX * 2;
         const tagH = TAG_SIZE + tagPadY * 2;
         const tagTopY = tagBottomY - tagH;
-        roundRect(ctx, PAD, tagTopY, tagW, tagH, 6);
-        ctx.fillStyle = tagStyle.color;
+        const tagX = overlayAlign === 'center' ? (W - tagW) / 2 : PAD;
+        roundRect(ctx, tagX, tagTopY, tagW, tagH, 6);
+        ctx.fillStyle = d.tagColor || tagStyle.color;
         ctx.fill();
         ctx.fillStyle = '#0a0f0d';
-        ctx.fillText(tagLabel, PAD + tagPadX, tagTopY + tagH / 2 + 1);
+        ctx.fillText(tagLabel, overlayAlign === 'center' ? W / 2 : tagX + tagPadX, tagTopY + tagH / 2 + 1);
 
-        // Headline/caption text — left-aligned, bold white, highlighted
-        // keywords in the active template's accent color
-        ctx.font = `400 ${CAPTION_SIZE}px Anton, sans-serif`;
-        ctx.textAlign = 'left';
+        // Headline/caption text — aligned per overlayAlign, sitting
+        // directly on the gradient scrim, highlighted keywords in the
+        // active template's accent color
+        ctx.font = `400 ${CAPTION_SIZE}px ${d.fontFamily || 'Anton, sans-serif'}`;
         ctx.textBaseline = 'alphabetic';
         const highlightSet = new Set((d.highlight_words || []).map(w => w.toLowerCase()));
-        const spaceWidth = ctx.measureText(' ').width;
         let ty = textBlockTop + CAPTION_SIZE * 0.85;
-        capLines.forEach(lineWords => {
-          let x = PAD;
-          lineWords.forEach(word => {
-            const clean = word.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
-            ctx.fillStyle = highlightSet.has(clean) ? highlightColor : TEXT_LIGHT;
-            ctx.fillText(word, x, ty);
-            x += ctx.measureText(word).width + spaceWidth;
+        if(overlayAlign === 'center'){
+          ctx.textAlign = 'left'; // drawCenteredHighlightedLines sets x per-line itself
+          drawCenteredHighlightedLines(ctx, capLines, d.highlight_words, W / 2, ty, LINE_H_CAP, TEXT_LIGHT, highlightColor);
+        } else {
+          ctx.textAlign = 'left';
+          const spaceWidth = ctx.measureText(' ').width;
+          capLines.forEach(lineWords => {
+            let x = PAD;
+            lineWords.forEach(word => {
+              const clean = word.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
+              ctx.fillStyle = highlightSet.has(clean) ? highlightColor : TEXT_LIGHT;
+              ctx.fillText(word, x, ty);
+              x += ctx.measureText(word).width + spaceWidth;
+            });
+            ty += LINE_H_CAP;
           });
-          ty += LINE_H_CAP;
-        });
+        }
 
         // @handle watermark, bottom-right — stands in for a logo since
         // there's no actual logo image to place here.
@@ -2204,8 +2321,28 @@ async function generateDrafts(){
 
     const now = Date.now();
     let homepageUrlsDropped = 0;
-    const newDrafts = freshItems.map((it, i) => {
-      const graphicCap = it.caption_graphic || it.caption || '';
+    // Keeps the on-image caption short and punchy even if the AI response
+// didn't split fields the way the prompt asked for — e.g. it only
+// returned one long "caption" instead of separate caption_graphic /
+// caption_feed, or caption_graphic itself came back too long. Prefers
+// cutting at the first sentence boundary; otherwise hard-caps by word count.
+function shortenForGraphic(text, maxWords = 28){
+  if(!text) return text;
+  const trimmed = text.trim();
+  const words = trimmed.split(/\s+/);
+  if(words.length <= maxWords) return trimmed;
+  const firstSentenceMatch = trimmed.match(/^[^.!?]+[.!?]/);
+  if(firstSentenceMatch){
+    const sentWords = firstSentenceMatch[0].trim().split(/\s+/);
+    if(sentWords.length >= 6 && sentWords.length <= maxWords + 6){
+      return firstSentenceMatch[0].trim();
+    }
+  }
+  return words.slice(0, maxWords).join(' ') + '…';
+}
+
+const newDrafts = freshItems.map((it, i) => {
+      const graphicCap = shortenForGraphic(it.caption_graphic || it.caption || '');
       const feedCap = it.caption_feed || it.caption || graphicCap;
       let url = it.url || '';
       if(url && isHomepageUrl(url)){
