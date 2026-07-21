@@ -377,10 +377,17 @@
           <button class="btn-ghost" data-align="center" title="Headline centered, boxed in the middle">Center</button>
         </div>
       </div>
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap;">
+        <span style="font-size:12px; color:var(--text-dim); white-space:nowrap; font-family:'IBM Plex Mono',monospace;">Quick select:</span>
+        <select id="templateQuickSelect" style="flex:1; min-width:160px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:'Sora',sans-serif; font-size:13px; padding:8px 10px;">
+          <option value="">— choose a page —</option>
+        </select>
+      </div>
       <div id="templateList"></div>
       <div class="template-add-row">
         <input type="text" id="templateNameInput" placeholder="Page name (e.g. TP Knows)" maxlength="40">
         <input type="text" id="templateHandleInput" placeholder="handle (no @)" maxlength="40" spellcheck="false">
+        <input type="text" id="templateHashtagsInput" placeholder="Default hashtags, comma-separated (e.g. TechPH, PCBuildPH)" style="flex:1 1 100%;">
         <input type="color" id="templateColorInput" value="#4ade80" title="Highlight/accent color for this page">
         <button id="templateAddBtn">Add</button>
       </div>
@@ -420,6 +427,7 @@
       <button class="btn-ghost" data-filter="approved">Approved</button>
       <button class="btn-ghost" data-filter="posted">Posted</button>
       <button class="btn-ghost" data-filter="history">🕒 History</button>
+      <button class="btn-ghost" data-filter="custom-news">⚙️ Custom News</button>
     </div>
   </div>
   <div class="status-line" id="statusLine"></div>
@@ -435,6 +443,44 @@ let PAGE_NAME = "tpknows"; // kept in sync with the active template's handle —
 let templates = [];
 let activeTemplateId = null;
 
+// Custom News settings: topics/keywords the user wants to focus on
+let customNewsTopics = []; // array of strings e.g. ["GPU", "DDR5", "Budget builds"]
+let customNewsEnabled = false;
+
+// ── Local persistent storage helpers ───────────────────────────────────────
+// Saves template list + activeTemplateId locally so the dropdown persists
+// across reloads even before Google Sheet loads.
+async function saveTemplatesToLocal(){
+  try{
+    await window.storage.set('tp_templates', JSON.stringify({ templates, activeTemplateId }));
+  }catch(e){ console.warn('Local template save failed:', e); }
+}
+async function loadTemplatesFromLocal(){
+  try{
+    const r = await window.storage.get('tp_templates');
+    if(r && r.value){
+      const d = JSON.parse(r.value);
+      if(Array.isArray(d.templates) && d.templates.length) templates = d.templates;
+      if(d.activeTemplateId) activeTemplateId = d.activeTemplateId;
+    }
+  }catch(e){ console.warn('Local template load failed:', e); }
+}
+async function saveCustomNewsToLocal(){
+  try{
+    await window.storage.set('tp_custom_news', JSON.stringify({ topics: customNewsTopics, enabled: customNewsEnabled }));
+  }catch(e){ console.warn('Custom news save failed:', e); }
+}
+async function loadCustomNewsFromLocal(){
+  try{
+    const r = await window.storage.get('tp_custom_news');
+    if(r && r.value){
+      const d = JSON.parse(r.value);
+      if(Array.isArray(d.topics)) customNewsTopics = d.topics;
+      customNewsEnabled = !!d.enabled;
+    }
+  }catch(e){ console.warn('Custom news load failed:', e); }
+}
+
 function getActiveTemplate(){
   return templates.find(t => t.id === activeTemplateId) || templates[0] || null;
 }
@@ -442,7 +488,13 @@ function getActiveTemplate(){
 function renderTemplates(){
   const list = document.getElementById('templateList');
   const count = document.getElementById('templatesCount');
+  const qs = document.getElementById('templateQuickSelect');
   count.textContent = `(${templates.length})`;
+
+  // Populate quick-select dropdown
+  qs.innerHTML = '<option value="">— choose a page —</option>' +
+    templates.map(t => `<option value="${t.id}" ${t.id === activeTemplateId ? 'selected' : ''}>@${escapeHtml(t.handle)} — ${escapeHtml(t.name)}</option>`).join('');
+
   if(templates.length === 0){
     list.innerHTML = `<span style="color:var(--text-dim);font-size:12.5px;">Wala pang template — magdagdag sa ibaba.</span>`;
     return;
@@ -458,6 +510,39 @@ function renderTemplates(){
   `).join('');
 }
 
+// Quick-select dropdown handler
+document.getElementById('templateQuickSelect').addEventListener('change', async (e) => {
+  const id = e.target.value;
+  if(!id) return;
+  activeTemplateId = id;
+  const t = getActiveTemplate();
+  if(t){
+    PAGE_NAME = t.handle;
+    injectPageHashtag(t.handle);
+  }
+  renderTemplates();
+  render();
+  await saveSettings();
+  await saveTemplatesToLocal();
+});
+
+// Injects/replaces the page hashtag in all current draft captions
+// so switching pages auto-updates the #hashtag in the feed text.
+function injectPageHashtag(handle){
+  if(!handle) return;
+  const tag = '#' + handle.replace(/^@+/, '').replace(/\s+/g, '').toLowerCase();
+  drafts.forEach(d => {
+    if(!d.caption) return;
+    // Replace any existing page tag (the last #word that matches our pattern) or append
+    const tagPattern = /#[a-zA-Z0-9_]+(?=\s*$)/;
+    if(tagPattern.test(d.caption)){
+      d.caption = d.caption.replace(tagPattern, tag);
+    } else {
+      d.caption = d.caption.trimEnd() + '\n' + tag;
+    }
+  });
+}
+
 document.getElementById('templateList').addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-action]');
   if(!btn) return;
@@ -465,10 +550,14 @@ document.getElementById('templateList').addEventListener('click', async (e) => {
   if(btn.dataset.action === 'use'){
     activeTemplateId = id;
     const t = getActiveTemplate();
-    if(t) PAGE_NAME = t.handle;
+    if(t){
+      PAGE_NAME = t.handle;
+      injectPageHashtag(t.handle);
+    }
     renderTemplates();
     render();
     await saveSettings();
+    await saveTemplatesToLocal();
   } else if(btn.dataset.action === 'delete'){
     templates = templates.filter(t => t.id !== id);
     if(activeTemplateId === id){
@@ -479,18 +568,23 @@ document.getElementById('templateList').addEventListener('click', async (e) => {
     renderTemplates();
     render();
     await saveSettings();
+    await saveTemplatesToLocal();
   }
 });
 
 document.getElementById('templateAddBtn').addEventListener('click', async () => {
   const nameInput = document.getElementById('templateNameInput');
   const handleInput = document.getElementById('templateHandleInput');
+  const hashtagsInput = document.getElementById('templateHashtagsInput');
   const colorInput = document.getElementById('templateColorInput');
   const name = nameInput.value.trim();
   const handle = handleInput.value.trim().replace(/^@+/, '');
   const color = colorInput.value || '#4ade80';
+  const hashtags = hashtagsInput.value.trim()
+    ? hashtagsInput.value.split(',').map(h => h.trim().replace(/^#/, '')).filter(Boolean)
+    : [];
   if(!name || !handle) return;
-  const newTemplate = { id: `tpl_${Date.now()}`, name, handle, color };
+  const newTemplate = { id: `tpl_${Date.now()}`, name, handle, color, hashtags };
   templates.push(newTemplate);
   if(!activeTemplateId){
     activeTemplateId = newTemplate.id;
@@ -498,10 +592,12 @@ document.getElementById('templateAddBtn').addEventListener('click', async () => 
   }
   nameInput.value = '';
   handleInput.value = '';
+  hashtagsInput.value = '';
   colorInput.value = '#4ade80';
   renderTemplates();
   render();
   await saveSettings();
+  await saveTemplatesToLocal();
 });
 
 const templatesPanel = document.getElementById('templatesPanel');
@@ -912,7 +1008,106 @@ function escapeHtml(str){
   return d.innerHTML;
 }
 
+function renderCustomNews(){
+  const handle = (getActiveTemplate() || {}).handle || PAGE_NAME;
+  const enabledStyle = customNewsEnabled
+    ? 'background:var(--trace);color:#05130a;'
+    : 'background:var(--panel-2);color:var(--text-dim);border:1px solid var(--line);';
+  feed.innerHTML = `
+    <!-- ── Generate one specific draft ─────────────────────────── -->
+    <div class="sources-panel" style="margin-top:4px; margin-bottom:14px;">
+      <div class="sources-head" style="cursor:default; padding-bottom:12px; border-bottom:1px solid var(--line); margin-bottom:14px;">
+        <span class="sources-title" style="font-size:13px; color:var(--text);">🎯 Generate a Specific Draft</span>
+      </div>
+      <p style="font-size:12.5px; color:var(--text-dim); margin:0 0 12px;">
+        I-type ang topic o i-paste ang article URL — mag-ge-generate ng isang draft mula doon. Nibo-bypass ang sources list.
+      </p>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <textarea id="customDraftInput" placeholder="e.g. 'RTX 5070 Ti restock Philippines' o i-paste ang article link" style="width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:10px; color:var(--text); font-family:'Sora',sans-serif; font-size:13.5px; padding:12px; resize:vertical; min-height:70px; box-sizing:border-box;"></textarea>
+        <button id="customDraftGenBtn" class="btn-primary" style="align-self:flex-start;">
+          <span id="customDraftGenLabel">⚡ Generate this one</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Focus topics filter ─────────────────────────────────── -->
+    <div class="sources-panel">
+      <div class="sources-head" style="cursor:default; padding-bottom:14px; border-bottom:1px solid var(--line); margin-bottom:16px;">
+        <span class="sources-title" style="font-size:13px; color:var(--text);">⚙️ Auto-Feed Focus Topics</span>
+        <button id="customNewsToggle" style="border-radius:8px; padding:7px 14px; font-size:12.5px; font-family:'Sora',sans-serif; font-weight:600; border:none; cursor:pointer; ${enabledStyle}">
+          ${customNewsEnabled ? '✓ Enabled' : 'Disabled'}
+        </button>
+      </div>
+      <p style="font-size:12.5px; color:var(--text-dim); margin:0 0 14px;">
+        Kapag naka-enable, ia-add ang mga topics na ito sa AI prompt para mas focused ang auto-feed. Pwedeng keywords, brands, o product lines (hal. <em>RTX 5090, DDR5, budget builds</em>).
+      </p>
+      <div class="source-list" id="customTopicList">
+        ${customNewsTopics.length === 0
+          ? `<span style="color:var(--text-dim);font-size:12.5px;">Wala pang topics — magdagdag sa ibaba.</span>`
+          : customNewsTopics.map((t,i) => `
+              <span class="source-chip">${escapeHtml(t)}<button data-ci="${i}" title="Remove">&times;</button></span>
+            `).join('')}
+      </div>
+      <div class="source-add" style="margin-top:12px;">
+        <input type="text" id="customTopicInput" placeholder="Add a topic, keyword, or brand…" style="flex:1; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:'Sora',sans-serif; font-size:13.5px; padding:10px 12px;">
+        <button id="customTopicAddBtn" style="background:var(--trace-dim);color:#eafff2;padding:10px 14px;border-radius:8px;font-size:13px;border:none;cursor:pointer;font-family:'Sora',sans-serif;">Add</button>
+      </div>
+      <p class="source-hint" style="margin-top:12px;">Active page: <strong style="color:var(--trace);">@${escapeHtml(handle)}</strong> — hashtag auto-injects as <strong style="color:var(--copper);">#${escapeHtml(handle.replace(/^@/,'').toLowerCase())}</strong> when you switch pages.</p>
+    </div>
+  `;
+
+  // — Generate specific draft handler —
+  document.getElementById('customDraftGenBtn').addEventListener('click', async () => {
+    const topic = document.getElementById('customDraftInput').value.trim();
+    if(!topic){ setStatus('Type a topic or paste an article URL first.', true); return; }
+    const btn = document.getElementById('customDraftGenBtn');
+    const lbl = document.getElementById('customDraftGenLabel');
+    btn.disabled = true;
+    lbl.innerHTML = '<span class="spinner"></span> Searching…';
+    setStatus('Fetching that story…');
+    try{
+      const newDrafts = await runGeneration({ topicFocus: topic, maxItems: '1' });
+      drafts = [...newDrafts, ...drafts];
+      await saveSettings();
+      document.getElementById('customDraftInput').value = '';
+      setStatus('Draft added — check the All tab.');
+    }catch(err){
+      console.error(err);
+      setStatus(`Could not generate that draft: ${err.message || 'unknown error'}`, true);
+    }finally{
+      btn.disabled = false;
+      lbl.textContent = '⚡ Generate this one';
+    }
+  });
+
+  // — Focus topics handlers —
+  document.getElementById('customNewsToggle').addEventListener('click', async () => {
+    customNewsEnabled = !customNewsEnabled;
+    await saveCustomNewsToLocal();
+    renderCustomNews();
+  });
+  document.getElementById('customTopicList').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-ci]');
+    if(!btn) return;
+    customNewsTopics.splice(parseInt(btn.dataset.ci), 1);
+    await saveCustomNewsToLocal();
+    renderCustomNews();
+  });
+  const addTopic = async () => {
+    const inp = document.getElementById('customTopicInput');
+    const val = inp.value.trim();
+    if(!val) return;
+    if(!customNewsTopics.some(t => t.toLowerCase() === val.toLowerCase())) customNewsTopics.push(val);
+    inp.value = '';
+    await saveCustomNewsToLocal();
+    renderCustomNews();
+  };
+  document.getElementById('customTopicAddBtn').addEventListener('click', addTopic);
+  document.getElementById('customTopicInput').addEventListener('keydown', (e) => { if(e.key==='Enter'){ e.preventDefault(); addTopic(); } });
+}
+
 function render(){
+  if(currentFilter === 'custom-news'){ renderCustomNews(); return; }
   const list = currentFilter === 'all' ? drafts : drafts.filter(d => d.status === currentFilter);
 
   if(list.length === 0){
@@ -2112,11 +2307,55 @@ Respond with ONLY a raw JSON array (no markdown fences, no commentary) where eac
 }
 
 function buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyleParam){
+  const topicFocus = (customNewsEnabled && customNewsTopics.length > 0)
+    ? `\nFOCUS TOPICS — Prioritize stories related to any of these (but don't exclude other strong stories): ${customNewsTopics.join(', ')}.\n`
+    : '';
+  const tpl = getActiveTemplate();
+  const pageHashtags = (tpl && tpl.hashtags && tpl.hashtags.length > 0)
+    ? tpl.hashtags.map(h => '#' + h).join(' ')
+    : '';
+  const hashtagInstruction = pageHashtags
+    ? `\nPAGE HASHTAGS — Every caption_feed MUST include these exact tags at the end: ${pageHashtags}. You may add 1-2 more relevant ones on top for 3-5 total.\n`
+    : '';
   return `You are the voice behind "${PAGE_NAME}" — a Filipino tech page run by someone who actually knows hardware inside-out: a builder, a repair tech, and a sharp observer of the industry. You write Facebook captions that sound like they came from the smartest, wittiest person in the room who also happens to explain things better than most tech journalists.
 
 ${scopeConstraint}
-
+${topicFocus}${hashtagInstruction}
 ${buildCaptionInstructions(usdToPhpRate, graphicStyleParam)}`;
+}
+
+// Lightweight wrapper used by the Custom News "Generate this one" button.
+// PHOTO_OVERLAY routes through a proxy (fetchNewsBatch) unlike CUSTOM_NEWS
+// which calls the API directly, so we build the prompt here and call that.
+async function runGeneration({ topicFocus = null, maxItems = '1' } = {}){
+  const usdToPhpRate = parseFloat(document.getElementById('usdPhpRateInput')?.value) || 58;
+  const graphicStyle = document.querySelector('input[name="graphicStyle"]:checked')?.value || 'graphic';
+  const scopeConstraint = topicFocus
+    ? `Focus specifically on this topic or article, and nothing else: "${topicFocus}". If it's a URL, find and use that specific article. Return exactly 1 item.`
+    : (sources.length > 0
+        ? `Only use these sources: ${sources.join(', ')}.`
+        : `Search broadly across reputable tech hardware outlets.`);
+  const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyle);
+  const userPrompt = topicFocus
+    ? `Find and write a draft for: ${topicFocus}`
+    : `Find today's PC hardware/component news and write ${maxItems} caption drafts as specified.`;
+  const items = await fetchNewsBatch(systemPrompt, userPrompt);
+  const now = Date.now();
+  return items.map((it, i) => ({
+    id: `d_${now}_${i}`,
+    headline: it.headline || 'Untitled',
+    source: it.source || '',
+    url: it.url || '',
+    category: it.category || 'General',
+    caption: it.caption_feed || it.caption || '',
+    captionGraphic: it.caption_graphic || it.caption || '',
+    highlight_words: Array.isArray(it.highlight_words) ? it.highlight_words : [],
+    imageUrl: it.image_url || '',
+    imageData: null,
+    status: 'draft',
+    createdAt: now,
+    origin: topicFocus ? 'custom' : 'auto'
+  }));
 }
 
 function sleep(ms){ return new Promise(res => setTimeout(res, ms)); }
@@ -2403,12 +2642,19 @@ const newDrafts = freshItems.map((it, i) => {
 genBtn.addEventListener('click', generateDrafts);
 
 (async () => {
+  // Load templates + custom news from local storage first for instant UI
+  await loadTemplatesFromLocal();
+  await loadCustomNewsFromLocal();
+  if(templates.length) renderTemplates();
+
   setStatus('Loading your drafts and settings from Google Sheet…');
   await loadAllFromSheet();
   renderTemplates();
   renderSources();
   render();
   setStatus('');
+  // Persist whatever the sheet loaded
+  await saveTemplatesToLocal();
 })();
 </script>
 
