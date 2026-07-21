@@ -1687,15 +1687,21 @@ tabs.addEventListener('click', async (e) => {
 
 // Shared writing-style / JSON-schema instructions used for every batch call,
 // whether it's a broad search or a single-source scoped search.
-function buildCaptionInstructions(usdToPhpRate){
-  return `For each news item, write TWO captions in the same voice — one short for the image graphic, one longer and more detailed for the actual Facebook feed post:
+function buildCaptionInstructions(usdToPhpRate, graphicStyleParam){
+  const isOverlay = graphicStyleParam === 'overlay';
 
-Both should be:
-- INTELLECTUALLY SHARP — show real understanding of WHY this matters. Connect the dots. Reference context (architecture generations, market positioning, historical comparisons, what this means for builders or buyers). Sound like someone who has built hundreds of PCs and read every spec sheet.
-- WITTY WITHOUT TRYING TOO HARD — clever wordplay, a well-placed analogy, dry humor, or a surprising take. Not memes, not cringe. Think: tech columnist with personality, not hype beast.
-- CONVERSATIONAL BUT ELEVATED — confident, direct, occasionally self-aware. Write how an intelligent Filipino tech creator actually thinks out loud.
-- FIRST LINE = HOOK — open with a sharp observation, a contrarian take, an unexpected analogy, or a question that makes someone stop scrolling. Never start with the brand name or "AMD announces...".
+  const graphicSpec = isOverlay ? `
+"caption_graphic" — the headline-style text rendered directly OVER the photo (left-aligned, bold, sitting on a dark gradient scrim for legibility) — think a sharp tech-news headline overlaid on the image itself, e.g. "VALVE ENGINEER EXPLAINS WHY COMPANY WON'T MAKE STEAM MACHINE EXCLUSIVES, SAYS RESTRICTING WHERE PEOPLE CAN PLAY 'ISN'T A GREAT MODEL'":
+- 15-30 words. Reads like an actual, specific news headline (who did/said what, and why it matters) — not just a vague tease. 3-4 lines on the image is completely normal at this length, so don't force it shorter than the story needs.
+- Still needs a sharp, witty angle in how it's phrased — a specific, smart framing beats a generic "Company announces X" every time — but it must summarize real specifics from the story, not just hook without saying anything.
+- No hashtags, no emoji.
+- English-dominant, since this needs to be scannable at a glance directly over a photo — a short Taglish interjection at the very start is fine if it lands naturally, but don't force it.
 
+Examples of the tone to hit for caption_graphic (overlay style):
+- "AMD QUIETLY DROPS RYZEN PRICES BY UP TO ₱3,000, AND INTEL DIDN'T SEE IT COMING"
+- "NVIDIA ENGINEER ADMITS THE RTX 5060'S 8GB VRAM WAS 'A BUDGET CALL,' NOT A DESIGN CHOICE"
+- "THIS ₱15K COOLER PROMISES SILENT 90°C LOADS — REVIEWERS AREN'T SO SURE"
+` : `
 "caption_graphic" — the short punchy hook that gets rendered directly on the image in big bold display type. This is now the ONLY text on the graphic itself, so it has to work completely on its own, like a viral page's teaser line — think "MOUNT ETNA'S ERUPTION CREATES A SKY EFFECT THAT LOOKS LIKE A FLAMING PHOENIX, GOES VIRAL!" energy, not a spec sheet:
 - 12-25 words, ONE flowing sentence (or two short clauses joined naturally). This is a hook, not an explanation — save the "why it matters" breakdown for caption_feed.
 - MUST be witty and a little bit dramatic — clever wordplay, a surprising comparison, a wink at the reader, mild hyperbole. It's fine to sound like clickbait-with-a-brain ("goes viral," "here's why," "and it's wild") as long as every claim in it is still true to the actual story — style can be exaggerated, facts cannot.
@@ -1708,7 +1714,16 @@ Examples of the tone to hit for caption_graphic specifically:
 - "This ₱15K GPU price cut is either genius or a warning sign. Maybe both."
 - "The RTX 5060 just got cheaper, and PC builders are losing their minds."
 - "A cooler that's basically a jet engine strapped to your CPU. Bold choice."
+`;
 
+  return `For each news item, write TWO captions in the same voice — one short for the image graphic, one longer and more detailed for the actual Facebook feed post:
+
+Both should be:
+- INTELLECTUALLY SHARP — show real understanding of WHY this matters. Connect the dots. Reference context (architecture generations, market positioning, historical comparisons, what this means for builders or buyers). Sound like someone who has built hundreds of PCs and read every spec sheet.
+- WITTY WITHOUT TRYING TOO HARD — clever wordplay, a well-placed analogy, dry humor, or a surprising take. Not memes, not cringe. Think: tech columnist with personality, not hype beast.
+- CONVERSATIONAL BUT ELEVATED — confident, direct, occasionally self-aware. Write how an intelligent Filipino tech creator actually thinks out loud.
+- FIRST LINE = HOOK — open with a sharp observation, a contrarian take, an unexpected analogy, or a question that makes someone stop scrolling. Never start with the brand name or "AMD announces...".
+${graphicSpec}
 "caption_feed" — the longer version that gets posted as the actual Facebook status/feed text:
 - 120-200 words. Go deeper than the graphic version: unpack the specs or numbers that matter, give your actual read on whether this is a big deal or overhyped, add a comparison to a prior generation or a rival product, and give buyers/builders concrete guidance (worth waiting for, worth upgrading, skip it, etc.).
 - GENUINELY TAGLISH WHERE IT SOUNDS NATURAL — NEVER FORCED — code-switch the way a witty, tech-savvy Filipino creator actually talks online, but only where the Tagalog genuinely lands: reactions, opinions, and punchlines can feel natural in Tagalog ("Sulit ba? Depende sa build mo", "Wag muna sumigaw ng 'day one purchase'"), while technical terms, specs, and numbers stay in English since that's how Filipino builders actually talk.
@@ -1736,12 +1751,12 @@ Respond with ONLY a raw JSON array (no markdown fences, no commentary) where eac
 [{"headline": "...", "source": "publication name", "url": "the exact direct article URL, or empty string if unknown — never the homepage", "image_url": "direct URL to the article's main/hero image if you can identify one, otherwise empty string", "category": "GPU|CPU|Storage|Motherboard|Peripherals|Cooling|PSU|General", "caption_graphic": "the short caption for the image graphic", "caption_feed": "the longer, more detailed caption for the Facebook feed post", "highlight_words": ["1-3 key words or short product names from the headline to visually emphasize, e.g. product names, brand names, or standout numbers"]}]`;
 }
 
-function buildSystemPrompt(scopeConstraint, usdToPhpRate){
+function buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyleParam){
   return `You are the voice behind "${PAGE_NAME}" — a Filipino tech page run by someone who actually knows hardware inside-out: a builder, a repair tech, and a sharp observer of the industry. You write Facebook captions that sound like they came from the smartest, wittiest person in the room who also happens to explain things better than most tech journalists.
 
 ${scopeConstraint}
 
-${buildCaptionInstructions(usdToPhpRate)}`;
+${buildCaptionInstructions(usdToPhpRate, graphicStyleParam)}`;
 }
 
 function sleep(ms){ return new Promise(res => setTimeout(res, ms)); }
@@ -1856,7 +1871,7 @@ async function generateDrafts(){
             setStatus(`Searching ${source}, ${rangeText}… (call ${callIndex}/${totalCalls})`);
             const scopeConstraint = `Only use this one source: ${source}. Do not use any other outlet. Find ALL relevant PC hardware/component news articles this specific outlet published ${rangeText}. Return EVERY qualifying story published in that exact window, even if there are several — this is a narrow one-week slice, so completeness matters more than picking just the "best" one.`;
             const userPrompt = `Find every PC hardware/component news article "${source}" published ${rangeText}, and write the Facebook caption drafts as specified for each one.`;
-            const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate);
+            const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyle);
             try{
               const sourceItems = await fetchNewsBatch(systemPrompt, userPrompt);
               items = items.concat(sourceItems);
@@ -1878,7 +1893,7 @@ async function generateDrafts(){
           setStatus(`Searching hardware news, ${rangeText}… (week ${wi + 1}/${weekChunks.length})`);
           const scopeConstraint = `Search broadly across reputable tech hardware outlets. Find ALL relevant PC hardware/component news articles published ${rangeText}. Return every qualifying story from that window, not just the top one or two.`;
           const userPrompt = `Find PC hardware/component news published ${rangeText} and write the Facebook caption drafts as specified. Return every distinct qualifying article from that window.`;
-          const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate);
+          const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyle);
           try{
             const weekItems = await fetchNewsBatch(systemPrompt, userPrompt);
             items = items.concat(weekItems);
@@ -1896,7 +1911,7 @@ async function generateDrafts(){
         ? `Only use these sources — search site-by-site if needed, and skip any story you can't attribute to one of them: ${sources.join(', ')}. Do not use any other outlet. Find PC hardware/component news published ${dateRangeText}.`
         : `Search broadly across reputable tech hardware outlets. Find PC hardware/component news published ${dateRangeText}.`;
       const userPrompt = `Find today's PC hardware/component news and write the Facebook caption drafts as specified. Today's date is ${today.toDateString()}.`;
-      const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate);
+      const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyle);
       items = await fetchNewsBatch(systemPrompt, userPrompt);
     }
 
