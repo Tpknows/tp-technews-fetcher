@@ -352,6 +352,13 @@
       <span class="chevron">▾</span>
     </div>
     <div class="sources-body">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+        <span style="font-size:12.5px; color:var(--text-dim); white-space:nowrap;">Graphic style:</span>
+        <div class="tabs" id="graphicStyleToggle" style="margin-left:0;">
+          <button class="btn-ghost active" data-style="band" title="Photo on top, light band with caption below">Band</button>
+          <button class="btn-ghost" data-style="overlay" title="Text directly over the photo with a dark gradient">Photo Overlay</button>
+        </div>
+      </div>
       <div id="templateList"></div>
       <div class="template-add-row">
         <input type="text" id="templateNameInput" placeholder="Page name (e.g. TP Knows)" maxlength="40">
@@ -481,6 +488,18 @@ document.getElementById('templateAddBtn').addEventListener('click', async () => 
 
 const templatesPanel = document.getElementById('templatesPanel');
 document.getElementById('templatesHead').addEventListener('click', () => templatesPanel.classList.toggle('collapsed'));
+
+// Global graphic style: 'band' (photo on top, light band + centered caption
+// below) or 'overlay' (text directly over the photo with a dark gradient,
+// left-aligned, category tag pill, @handle watermark bottom-right).
+let graphicStyle = 'band';
+document.getElementById('graphicStyleToggle').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-style]');
+  if(!btn) return;
+  graphicStyle = btn.dataset.style;
+  [...document.getElementById('graphicStyleToggle').children].forEach(b => b.classList.toggle('active', b === btn));
+  render(); // redraw all visible graphics in the new style
+});
 
 let drafts = [];
 let currentFilter = 'all';
@@ -832,6 +851,10 @@ function render(){
         <textarea data-id="${d.id}" class="caption-input">${escapeHtml(d.caption)}</textarea>
         <div class="graphic-block">
           <span class="graphic-label">Post graphic</span>
+          ${graphicStyle === 'overlay' ? `
+          <span class="graphic-label" style="margin-top:0;">Category tag (shown on the photo)</span>
+          <input type="text" data-id="${d.id}" class="category-label-input" value="${escapeHtml(d.categoryLabel || d.category || '')}" maxlength="24" style="width:100%; margin-bottom:12px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:'Sora',sans-serif; font-size:13px; padding:9px 11px;">
+          ` : ''}
           <div class="graphic-canvas-wrap" id="canvasWrap-${d.id}">
             <canvas id="canvas-${d.id}" width="1080" height="1080"></canvas>
           </div>
@@ -875,6 +898,14 @@ feed.addEventListener('input', (e) => {
       d.graphicCaption = e.target.value;
       saveDrafts();
       if(d.imageData) drawGraphic(d); // live-update the rendered graphic
+    }
+  } else if(e.target.classList.contains('category-label-input')){
+    const id = e.target.dataset.id;
+    const d = drafts.find(x => x.id === id);
+    if(d){
+      d.categoryLabel = e.target.value;
+      saveDrafts();
+      drawGraphic(d); // live-update the tag shown on the graphic
     }
   }
 });
@@ -1402,7 +1433,7 @@ function drawCategoryBackground(ctx, W, imgAreaH, category){
   ctx.restore();
 }
 
-function drawGraphic(d){
+function drawGraphicBand(d){
   return new Promise((resolve) => {
     const canvas = document.getElementById(`canvas-${d.id}`);
     if(!canvas){ resolve(false); return; }
@@ -1513,6 +1544,133 @@ function drawGraphic(d){
       }
     });
   });
+}
+
+// Photo-overlay style: text sits directly on the photo (full-bleed, cover-fit)
+// with a dark gradient scrim at the bottom for legibility, a colored category
+// tag pill, left-aligned bold headline text, and a small @handle watermark
+// bottom-right — closer to a typical viral news-page graphic than the
+// separate-band style.
+function drawGraphicOverlay(d){
+  return new Promise((resolve) => {
+    const canvas = document.getElementById(`canvas-${d.id}`);
+    if(!canvas){ resolve(false); return; }
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height; // 1080 x 1080
+
+    Promise.all([
+      document.fonts.load('400 60px Anton'),
+      document.fonts.load('700 22px "IBM Plex Mono"')
+    ]).catch(() => {}).then(() => {
+
+      const finishDraw = (photoImg) => {
+        ctx.clearRect(0, 0, W, H);
+
+        const PAD = 56;
+        const CAPTION_SIZE = 50;
+        const LINE_H_CAP = 58;
+        const TAG_SIZE = 20;
+        const HANDLE_SIZE = 24;
+        const BOTTOM_PAD = 60;
+        const TEXT_LIGHT = '#ffffff';
+
+        const activeTemplate = getActiveTemplate();
+        const highlightColor = (activeTemplate && activeTemplate.color) || '#4ade80';
+
+        const bandText = (d.graphicCaption != null ? d.graphicCaption : d.caption).toUpperCase();
+        ctx.font = `400 ${CAPTION_SIZE}px Anton, sans-serif`;
+        const capLines = wrapWordsIntoLines(ctx, bandText, W - PAD * 2);
+        const capH = capLines.length * LINE_H_CAP;
+
+        const tagLabel = (d.categoryLabel || d.category || 'NEWS').toUpperCase();
+        const tagStyle = getCategoryStyle(d.category);
+
+        // ── Photo fills the ENTIRE canvas (cover-fit) ───────────
+        if(photoImg){
+          const scale = Math.max(W / photoImg.width, H / photoImg.height);
+          const iw = photoImg.width * scale, ih = photoImg.height * scale;
+          const ix = (W - iw) / 2, iy = (H - ih) / 2;
+          ctx.drawImage(photoImg, ix, iy, iw, ih);
+        } else {
+          drawCategoryBackground(ctx, W, H, d.category);
+        }
+
+        // ── Dark gradient scrim at the bottom for text legibility ─
+        const scrimTop = H * 0.5;
+        const grad = ctx.createLinearGradient(0, scrimTop, 0, H);
+        grad.addColorStop(0, 'rgba(5,6,8,0)');
+        grad.addColorStop(0.55, 'rgba(5,6,8,0.72)');
+        grad.addColorStop(1, 'rgba(5,6,8,0.94)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, scrimTop, W, H - scrimTop);
+
+        // ── Layout from the bottom up: handle → caption block → tag ─
+        const handleY = H - BOTTOM_PAD;
+        const textBlockBottom = handleY - 46;
+        const textBlockTop = textBlockBottom - capH;
+        const tagBottomY = textBlockTop - 22;
+
+        // Category tag pill
+        ctx.font = `700 ${TAG_SIZE}px "IBM Plex Mono", monospace`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        const tagPadX = 16, tagPadY = 10;
+        const tagTextWidth = ctx.measureText(tagLabel).width;
+        const tagW = tagTextWidth + tagPadX * 2;
+        const tagH = TAG_SIZE + tagPadY * 2;
+        const tagTopY = tagBottomY - tagH;
+        roundRect(ctx, PAD, tagTopY, tagW, tagH, 6);
+        ctx.fillStyle = tagStyle.color;
+        ctx.fill();
+        ctx.fillStyle = '#0a0f0d';
+        ctx.fillText(tagLabel, PAD + tagPadX, tagTopY + tagH / 2 + 1);
+
+        // Headline/caption text — left-aligned, bold white, highlighted
+        // keywords in the active template's accent color
+        ctx.font = `400 ${CAPTION_SIZE}px Anton, sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+        const highlightSet = new Set((d.highlight_words || []).map(w => w.toLowerCase()));
+        const spaceWidth = ctx.measureText(' ').width;
+        let ty = textBlockTop + CAPTION_SIZE * 0.85;
+        capLines.forEach(lineWords => {
+          let x = PAD;
+          lineWords.forEach(word => {
+            const clean = word.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
+            ctx.fillStyle = highlightSet.has(clean) ? highlightColor : TEXT_LIGHT;
+            ctx.fillText(word, x, ty);
+            x += ctx.measureText(word).width + spaceWidth;
+          });
+          ty += LINE_H_CAP;
+        });
+
+        // @handle watermark, bottom-right — stands in for a logo since
+        // there's no actual logo image to place here.
+        ctx.font = `700 ${HANDLE_SIZE}px "IBM Plex Mono", monospace`;
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'alphabetic';
+        const handle = activeTemplate ? `@${activeTemplate.handle.toLowerCase().replace(/\s+/g,'')}` : (PAGE_NAME ? `@${PAGE_NAME.toLowerCase().replace(/\s+/g,'')}` : '@tpknows');
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.fillText(handle, W - PAD, handleY);
+
+        resolve(true);
+      };
+
+      if(d.imageData){
+        const img = new Image();
+        img.onload = () => finishDraw(img);
+        img.onerror = () => { setStatus('Could not render that photo — using category background instead.', true); finishDraw(null); };
+        img.src = d.imageData;
+      } else {
+        finishDraw(null);
+      }
+    });
+  });
+}
+
+// Dispatcher — picks the renderer based on the global graphicStyle toggle.
+function drawGraphic(d){
+  return graphicStyle === 'overlay' ? drawGraphicOverlay(d) : drawGraphicBand(d);
 }
 
 tabs.addEventListener('click', async (e) => {
