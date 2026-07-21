@@ -1452,6 +1452,63 @@ function wrapWordsBalanced(ctx, text, maxWidth){
   return best;
 }
 
+// Some source screenshots (e.g. a capture of an app window) come with solid
+// black letterbox bars baked into the actual pixels — those aren't part of
+// the cover-fit math, so no amount of pan/zoom slider adjustment removes
+// them; they just get pushed off-center and read as an uneven "gap" on one
+// side. This scans the image's outer edges for solid near-black rows/columns
+// and returns a crop rect that excludes them, so the cover-fit fills the
+// canvas with actual content instead of dead black space. Caps how much it
+// will trim per side (35%) so it never eats into a normal photo.
+function computeContentCropRect(img){
+  const w = img.width, h = img.height;
+  const fallback = { sx: 0, sy: 0, sw: w, sh: h };
+  if(!w || !h) return fallback;
+  try{
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const cctx = c.getContext('2d');
+    cctx.drawImage(img, 0, 0);
+    const { data } = cctx.getImageData(0, 0, w, h);
+
+    const THRESH = 16;       // per-channel brightness considered "black"
+    const DARK_RATIO = 0.96; // fraction of sampled pixels in the row/col that must be dark
+
+    const rowIsDark = (y) => {
+      let dark = 0, total = 0;
+      const step = Math.max(1, Math.floor(w / 150));
+      for(let x = 0; x < w; x += step){
+        const i = (y * w + x) * 4;
+        total++;
+        if((data[i] + data[i+1] + data[i+2]) / 3 < THRESH) dark++;
+      }
+      return total > 0 && dark / total >= DARK_RATIO;
+    };
+    const colIsDark = (x) => {
+      let dark = 0, total = 0;
+      const step = Math.max(1, Math.floor(h / 150));
+      for(let y = 0; y < h; y += step){
+        const i = (y * w + x) * 4;
+        total++;
+        if((data[i] + data[i+1] + data[i+2]) / 3 < THRESH) dark++;
+      }
+      return total > 0 && dark / total >= DARK_RATIO;
+    };
+
+    const maxTrimY = Math.floor(h * 0.35), maxTrimX = Math.floor(w * 0.35);
+    let top = 0; while(top < maxTrimY && rowIsDark(top)) top++;
+    let bottom = h - 1; while(bottom > h - 1 - maxTrimY && rowIsDark(bottom)) bottom--;
+    let left = 0; while(left < maxTrimX && colIsDark(left)) left++;
+    let right = w - 1; while(right > w - 1 - maxTrimX && colIsDark(right)) right--;
+
+    const sw = Math.max(1, right - left + 1), sh = Math.max(1, bottom - top + 1);
+    if(sw >= w * 0.99 && sh >= h * 0.99) return fallback; // nothing meaningful to trim
+    return { sx: left, sy: top, sw, sh };
+  }catch(e){
+    return fallback; // e.g. tainted canvas — just skip trimming
+  }
+}
+
 // Auto-fits the headline into a given box by shrinking the font size (in 1px
 // steps) until the wrapped text's line count AND total block height both fit
 // — instead of a fixed font size that overflows on long headlines or looks
@@ -1650,9 +1707,14 @@ function drawGraphicBand(d){
           // applied so BOTH sliders always have real pan range — without it,
           // a landscape photo leaves zero vertical slack (and a portrait
           // photo leaves zero horizontal slack), making one slider a no-op.
+          if(d._cropRectFor !== d.imageData){
+            d._cropRect = computeContentCropRect(photoImg);
+            d._cropRectFor = d.imageData;
+          }
+          const crop = d._cropRect;
           const OVERSCAN = 1.15;
-          const scale = Math.max(W / photoImg.width, imgAreaH / photoImg.height) * OVERSCAN;
-          const iw = photoImg.width * scale, ih = photoImg.height * scale;
+          const scale = Math.max(W / crop.sw, imgAreaH / crop.sh) * OVERSCAN;
+          const iw = crop.sw * scale, ih = crop.sh * scale;
           const offsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
           const offsetY = d.imageOffsetY != null ? d.imageOffsetY : 0.5;
           const ix = (W - iw) * offsetX, iy = (imgAreaH - ih) * offsetY;
@@ -1660,7 +1722,7 @@ function drawGraphicBand(d){
           ctx.beginPath();
           ctx.rect(0, 0, W, imgAreaH);
           ctx.clip();
-          ctx.drawImage(photoImg, ix, iy, iw, ih);
+          ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, ix, iy, iw, ih);
           ctx.restore();
         } else {
           // ── No photo available — auto category background ───
@@ -1758,13 +1820,18 @@ function drawGraphicOverlay(d){
         if(photoImg){
           // Overscan so both sliders always have real pan range (see note
           // in the Band style renderer above for why this is needed).
+          if(d._cropRectFor !== d.imageData){
+            d._cropRect = computeContentCropRect(photoImg);
+            d._cropRectFor = d.imageData;
+          }
+          const crop = d._cropRect;
           const OVERSCAN = 1.15;
-          const scale = Math.max(W / photoImg.width, H / photoImg.height) * OVERSCAN;
-          const iw = photoImg.width * scale, ih = photoImg.height * scale;
+          const scale = Math.max(W / crop.sw, H / crop.sh) * OVERSCAN;
+          const iw = crop.sw * scale, ih = crop.sh * scale;
           const offsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
           const offsetY = d.imageOffsetY != null ? d.imageOffsetY : 0.5;
           const ix = (W - iw) * offsetX, iy = (H - ih) * offsetY;
-          ctx.drawImage(photoImg, ix, iy, iw, ih);
+          ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, ix, iy, iw, ih);
         } else {
           drawCategoryBackground(ctx, W, H, d.category);
         }
