@@ -1380,6 +1380,35 @@ function wrapWordsIntoLines(ctx, text, maxWidth){
   return lines;
 }
 
+// Greedy wrapping (above) packs each line as full as possible, which often
+// leaves a long first line and a short, ragged leftover last line. This
+// finds the narrowest width that still produces the SAME number of lines
+// as the full-width greedy wrap — which naturally redistributes words so
+// line lengths come out closer to even, like CSS's text-wrap: balance.
+function wrapWordsBalanced(ctx, text, maxWidth){
+  const greedyLines = wrapWordsIntoLines(ctx, text, maxWidth);
+  const targetLineCount = greedyLines.length;
+  if(targetLineCount <= 1) return greedyLines;
+
+  const words = (text || '').split(/\s+/).filter(Boolean);
+  let minPossibleWidth = 0;
+  words.forEach(w => { minPossibleWidth = Math.max(minPossibleWidth, ctx.measureText(w).width); });
+
+  let lo = minPossibleWidth, hi = maxWidth;
+  let best = greedyLines;
+  for(let i = 0; i < 14; i++){
+    const mid = (lo + hi) / 2;
+    const candidate = wrapWordsIntoLines(ctx, text, mid);
+    if(candidate.length <= targetLineCount){
+      best = candidate;
+      hi = mid;
+    } else {
+      lo = mid;
+    }
+  }
+  return best;
+}
+
 // Draws pre-wrapped lines (from wrapWordsIntoLines) centered horizontally
 // around centerX, with per-word highlight support. Returns the y position
 // after the last line.
@@ -1505,7 +1534,7 @@ function drawGraphicBand(d){
         const bandText = (d.graphicCaption != null ? d.graphicCaption : d.caption).toUpperCase();
 
         ctx.font = `400 ${CAPTION_SIZE}px Anton, sans-serif`;
-        const capLines = wrapWordsIntoLines(ctx, bandText, W - PAD * 2);
+        const capLines = wrapWordsBalanced(ctx, bandText, W - PAD * 2);
         const capH = capLines.length * LINE_H_CAP;
 
         ctx.font = `600 ${HANDLE_SIZE}px "IBM Plex Mono", monospace`;
@@ -1535,7 +1564,12 @@ function drawGraphicBand(d){
 
         if(photoImg){
           // ── Draw real photo (top, cover-fit, adjustable crop position) ─
-          const scale = Math.max(W / photoImg.width, imgAreaH / photoImg.height);
+          // A small overscan (beyond the strict minimum cover-fit scale) is
+          // applied so BOTH sliders always have real pan range — without it,
+          // a landscape photo leaves zero vertical slack (and a portrait
+          // photo leaves zero horizontal slack), making one slider a no-op.
+          const OVERSCAN = 1.15;
+          const scale = Math.max(W / photoImg.width, imgAreaH / photoImg.height) * OVERSCAN;
           const iw = photoImg.width * scale, ih = photoImg.height * scale;
           const offsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
           const offsetY = d.imageOffsetY != null ? d.imageOffsetY : 0.5;
@@ -1624,7 +1658,7 @@ function drawGraphicOverlay(d){
 
         const bandText = (d.graphicCaption != null ? d.graphicCaption : d.caption).toUpperCase();
         ctx.font = `400 ${CAPTION_SIZE}px Anton, sans-serif`;
-        const capLines = wrapWordsIntoLines(ctx, bandText, W - PAD * 2);
+        const capLines = wrapWordsBalanced(ctx, bandText, W - PAD * 2);
         const capH = capLines.length * LINE_H_CAP;
 
         const tagLabel = (d.categoryLabel || d.category || 'NEWS').toUpperCase();
@@ -1632,7 +1666,10 @@ function drawGraphicOverlay(d){
 
         // ── Photo fills the ENTIRE canvas (cover-fit, adjustable crop) ──
         if(photoImg){
-          const scale = Math.max(W / photoImg.width, H / photoImg.height);
+          // Overscan so both sliders always have real pan range (see note
+          // in the Band style renderer above for why this is needed).
+          const OVERSCAN = 1.15;
+          const scale = Math.max(W / photoImg.width, H / photoImg.height) * OVERSCAN;
           const iw = photoImg.width * scale, ih = photoImg.height * scale;
           const offsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
           const offsetY = d.imageOffsetY != null ? d.imageOffsetY : 0.5;
