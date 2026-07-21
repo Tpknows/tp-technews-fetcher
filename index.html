@@ -759,10 +759,53 @@ function renderHistory(){
           </div>
           <div class="card-headline">${escapeHtml(d.headline)}</div>
           <div class="card-caption" style="font-size:13px;color:var(--text-dim);margin-top:6px;white-space:pre-wrap;">${escapeHtml(d.caption)}</div>
+          <div class="card-actions" style="margin-top:10px;">
+            <button class="mini-btn pull-history" data-session="${si}" data-draft="${d.id}">↩️ Pull to Drafts</button>
+          </div>
         </div>
       `).join('')}
     </div>
   `).join('');
+
+  // Pull-to-drafts handler — copies a history item back into the live
+  // Drafts list (as an editable 'draft' status card) so it can be re-edited,
+  // re-approved, or re-posted, without touching or removing it from History.
+  feed.querySelectorAll('.pull-history').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const si = parseInt(btn.dataset.session);
+      const session = history_sessions[si];
+      if(!session) return;
+      const hd = session.drafts.find(x => x.id === btn.dataset.draft);
+      if(!hd) return;
+
+      const now = Date.now();
+      const graphicCap = hd.graphicCaption || hd.caption || '';
+      const restored = {
+        id: `d_${now}_pull`,
+        headline: hd.headline || 'Untitled',
+        source: hd.source || '',
+        url: hd.url || '',
+        category: hd.category || 'General',
+        caption: hd.caption || '',
+        graphicCaption: graphicCap,
+        highlight_words: Array.isArray(hd.highlight_words) ? hd.highlight_words : [],
+        imageUrl: hd.imageUrl || '',
+        imageData: null,
+        imagePrompt: null,
+        promptCopied: false,
+        status: 'draft',
+        createdAt: now
+      };
+
+      drafts = [restored, ...drafts];
+      await saveDrafts(true);
+      currentFilter = 'all';
+      [...tabs.children].forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
+      render();
+      if(restored.imageUrl) autoFetchPhotos([restored]); // background photo fetch, same as fresh generation
+      setStatus(`Pulled "${restored.headline}" back into Drafts — you can edit it now.`);
+    });
+  });
 
   // Remove session handler
   feed.querySelectorAll('.history-clear-btn').forEach(btn => {
