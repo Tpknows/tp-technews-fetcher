@@ -1409,6 +1409,38 @@ function wrapWordsBalanced(ctx, text, maxWidth){
   return best;
 }
 
+// Auto-fits the headline into a given box by shrinking the font size (in 1px
+// steps) until the wrapped text's line count AND total block height both fit
+// — instead of a fixed font size that overflows on long headlines or looks
+// too small/cramped on short ones. Short headlines stay near maxFontSize;
+// long ones shrink down (never below minFontSize) so everything stays
+// proportional to how much text there actually is.
+function fitCaptionFont(ctx, text, opts){
+  const {
+    maxWidth, maxHeight, maxFontSize, minFontSize,
+    fontWeight = '400', fontFamily = 'Anton, sans-serif',
+    lineHeightRatio = 1.16, maxLines = 5
+  } = opts;
+
+  let fontSize = maxFontSize;
+  let lines = [], lineH = 0;
+
+  while(fontSize >= minFontSize){
+    ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+    lines = wrapWordsBalanced(ctx, text, maxWidth);
+    lineH = Math.round(fontSize * lineHeightRatio);
+    const blockH = lines.length * lineH;
+    if(lines.length <= maxLines && blockH <= maxHeight) break;
+    fontSize -= 1;
+  }
+  fontSize = Math.max(fontSize, minFontSize);
+  ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+  lines = wrapWordsBalanced(ctx, text, maxWidth);
+  lineH = Math.round(fontSize * lineHeightRatio);
+
+  return { fontSize, lineH, lines };
+}
+
 // Draws pre-wrapped lines (from wrapWordsIntoLines) centered horizontally
 // around centerX, with per-word highlight support. Returns the y position
 // after the last line.
@@ -1522,8 +1554,6 @@ function drawGraphicBand(d){
 
         // ── Layout constants ──────────────────────────────────
         const PAD = 64;
-        const CAPTION_SIZE = 54;
-        const LINE_H_CAP = 62;
         const HANDLE_SIZE = 24;
         const STRIP_GAP = 0;    // photo runs straight into the light band, no dark gradient gap
         const INNER_PAD_TOP = 36;
@@ -1533,8 +1563,17 @@ function drawGraphicBand(d){
         // for "text on image", styled here as the bold condensed headline.
         const bandText = (d.graphicCaption != null ? d.graphicCaption : d.caption).toUpperCase();
 
-        ctx.font = `400 ${CAPTION_SIZE}px Anton, sans-serif`;
-        const capLines = wrapWordsBalanced(ctx, bandText, W - PAD * 2);
+        // Font size auto-scales to the headline length: short headlines stay
+        // big and bold, long ones shrink to keep the band from ballooning
+        // and eating the whole canvas.
+        const { fontSize: CAPTION_SIZE, lineH: LINE_H_CAP, lines: capLines } = fitCaptionFont(ctx, bandText, {
+          maxWidth: W - PAD * 2,
+          maxHeight: H * 0.34,
+          maxFontSize: 58,
+          minFontSize: 30,
+          fontFamily: 'Anton, sans-serif',
+          maxLines: 4
+        });
         const capH = capLines.length * LINE_H_CAP;
 
         ctx.font = `600 ${HANDLE_SIZE}px "IBM Plex Mono", monospace`;
@@ -1646,8 +1685,6 @@ function drawGraphicOverlay(d){
         ctx.clearRect(0, 0, W, H);
 
         const PAD = 56;
-        const CAPTION_SIZE = 50;
-        const LINE_H_CAP = 58;
         const TAG_SIZE = 20;
         const HANDLE_SIZE = 24;
         const BOTTOM_PAD = 60;
@@ -1657,8 +1694,18 @@ function drawGraphicOverlay(d){
         const highlightColor = (activeTemplate && activeTemplate.color) || '#4ade80';
 
         const bandText = (d.graphicCaption != null ? d.graphicCaption : d.caption).toUpperCase();
-        ctx.font = `400 ${CAPTION_SIZE}px Anton, sans-serif`;
-        const capLines = wrapWordsBalanced(ctx, bandText, W - PAD * 2);
+
+        // Font size auto-scales to the headline length: short headlines get
+        // a big, punchy size; long ones shrink so the text block never
+        // overflows the photo or crowds out the tag/handle above and below it.
+        const { fontSize: CAPTION_SIZE, lineH: LINE_H_CAP, lines: capLines } = fitCaptionFont(ctx, bandText, {
+          maxWidth: W - PAD * 2,
+          maxHeight: H * 0.4,
+          maxFontSize: 56,
+          minFontSize: 28,
+          fontFamily: 'Anton, sans-serif',
+          maxLines: 5
+        });
         const capH = capLines.length * LINE_H_CAP;
 
         const tagLabel = (d.categoryLabel || d.category || 'NEWS').toUpperCase();
