@@ -27,6 +27,49 @@ export default {
       }
     }
 
+    // ── Post to Facebook (/post-to-facebook) ─────────────────
+    // Receives the finished graphic as a binary blob (no public image
+    // hosting needed) + caption from the browser, forwards it to the
+    // Facebook Graph API using a Page Access Token kept server-side as a
+    // Worker secret (never exposed to the browser).
+    if (url.pathname === "/post-to-facebook") {
+      if (request.method === "OPTIONS") return corsResponse(null, 204);
+      if (request.method !== "POST") return corsResponse(JSON.stringify({ error: "Method not allowed" }), 405);
+
+      const pageId = env.FB_PAGE_ID;
+      const accessToken = env.FB_PAGE_ACCESS_TOKEN;
+      if (!pageId || !accessToken) {
+        return corsResponse(JSON.stringify({
+          error: "Facebook not configured on the Worker — set FB_PAGE_ID and FB_PAGE_ACCESS_TOKEN secrets first."
+        }), 500);
+      }
+
+      try {
+        const incomingForm = await request.formData();
+        const imageBlob = incomingForm.get("image");
+        const caption = incomingForm.get("caption") || "";
+        if (!imageBlob) return corsResponse(JSON.stringify({ error: "Missing image" }), 400);
+
+        const fbForm = new FormData();
+        fbForm.append("source", imageBlob, "post.jpg");
+        fbForm.append("caption", caption);
+        fbForm.append("access_token", accessToken);
+
+        const fbRes = await fetch(`https://graph.facebook.com/v21.0/${pageId}/photos`, {
+          method: "POST",
+          body: fbForm,
+        });
+        const fbData = await fbRes.json();
+
+        if (fbData.error) {
+          return corsResponse(JSON.stringify({ error: fbData.error.message || "Facebook API error" }), 502);
+        }
+        return corsResponse(JSON.stringify({ ok: true, postId: fbData.post_id || fbData.id }), 200);
+      } catch (e) {
+        return corsResponse(JSON.stringify({ error: "Post failed: " + e.message }), 500);
+      }
+    }
+
     // ── CORS preflight ───────────────────────────────────────
     if (request.method === "OPTIONS") return corsResponse(null, 204);
     if (request.method !== "POST") return corsResponse(JSON.stringify({ error: "Method not allowed" }), 405);
