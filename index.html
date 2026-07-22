@@ -2756,7 +2756,7 @@ async function runGeneration({ topicFocus = null, maxItems = '1' } = {}){
     url: it.url || '',
     category: it.category || 'General',
     caption: it.caption_feed || it.caption || '',
-    captionGraphic: it.caption_graphic || it.caption || '',
+    graphicCaption: shortenForGraphic(it.caption_graphic || it.caption || ''),
     highlight_words: Array.isArray(it.highlight_words) ? it.highlight_words : [],
     imageUrl: it.image_url || '',
     imageData: null,
