@@ -1138,7 +1138,7 @@ function render(){
           </div>
         </div>
         <h3 class="headline">${escapeHtml(d.headline)}</h3>
-        <p class="source-line">${escapeHtml(d.source || '')}${d.url ? ` · <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">source ↗</a>` : ''}</p>
+        <p class="source-line">${escapeHtml(d.source || '')}${d.url ? ` · <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">source ↗</a>` : ''}${d.publishedDate ? ` · <span style="color:var(--text-dim);font-size:11.5px;">📅 ${escapeHtml(d.publishedDate)}</span>` : ''}</p>
         <span class="graphic-label" style="margin-top:10px;">Caption for graphic (text on image)</span>
         <textarea data-id="${d.id}" class="graphic-caption-input" style="margin-bottom:12px;">${escapeHtml(d.graphicCaption != null ? d.graphicCaption : d.caption)}</textarea>
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
@@ -2247,6 +2247,13 @@ tabs.addEventListener('click', async (e) => {
 // whether it's a broad search or a single-source scoped search.
 function buildCaptionInstructions(usdToPhpRate, graphicStyleParam){
   const isOverlay = graphicStyleParam === 'overlay';
+  const now = new Date();
+  const todayStr = now.toDateString();
+  const monthStr = now.toLocaleString('en-US', { month: 'long', year: 'numeric' }); // e.g. "July 2026"
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toDateString();
+  const recencyRule = `
+⚠️ RECENCY RULE — CRITICAL: Today is ${todayStr}. Only include articles published between ${monthStart} and today (within ${monthStr}). Any article published before ${monthStart} must be SKIPPED — do not include it regardless of how relevant or well-ranked it is. Always check and confirm the publish date of every article before including it. If the publish date cannot be confirmed to be within ${monthStr}, exclude it.
+`;
 
   const graphicSpec = isOverlay ? `
 "caption_graphic" — the headline-style text rendered directly OVER the photo (left-aligned, bold, sitting on a dark gradient scrim for legibility) — think a sharp tech-news headline overlaid on the image itself, e.g. "VALVE ENGINEER EXPLAINS WHY COMPANY WON'T MAKE STEAM MACHINE EXCLUSIVES, SAYS RESTRICTING WHERE PEOPLE CAN PLAY 'ISN'T A GREAT MODEL'":
@@ -2274,7 +2281,8 @@ Examples of the tone to hit for caption_graphic specifically:
 - "A cooler that's basically a jet engine strapped to your CPU. Bold choice."
 `;
 
-  return `For each news item, write TWO captions in the same voice — one short for the image graphic, one longer and more detailed for the actual Facebook feed post:
+  return `${recencyRule}
+For each news item, write TWO captions in the same voice — one short for the image graphic, one longer and more detailed for the actual Facebook feed post:
 
 Both should be:
 - INTELLECTUALLY SHARP — show real understanding of WHY this matters. Connect the dots. Reference context (architecture generations, market positioning, historical comparisons, what this means for builders or buyers). Sound like someone who has built hundreds of PCs and read every spec sheet.
@@ -2306,7 +2314,8 @@ CRITICAL — "url" FIELD RULES:
 - If you cannot find that specific article's direct URL, set "url" to an empty string ("") rather than falling back to the homepage or guessing.
 
 Respond with ONLY a raw JSON array (no markdown fences, no commentary) where each item has exactly these fields:
-[{"headline": "...", "source": "publication name", "url": "the exact direct article URL, or empty string if unknown — never the homepage", "image_url": "direct URL to the article's main/hero image if you can identify one, otherwise empty string", "category": "GPU|CPU|Storage|Motherboard|Peripherals|Cooling|PSU|Games|General", "caption_graphic": "the short caption for the image graphic", "caption_feed": "the longer, more detailed caption for the Facebook feed post", "highlight_words": ["1-3 key words or short product names from the headline to visually emphasize, e.g. product names, brand names, or standout numbers"]}]`;
+[{"headline": "...", "source": "publication name", "url": "the exact direct article URL, or empty string if unknown — never the homepage", "image_url": "direct URL to the article's main/hero image if you can identify one, otherwise empty string", "category": "GPU|CPU|Storage|Motherboard|Peripherals|Cooling|PSU|Games|General",
+  "published_date": "ISO date string of when the article was published, e.g. 2025-07-22 — leave empty string if unknown", "caption_graphic": "the short caption for the image graphic", "caption_feed": "the longer, more detailed caption for the Facebook feed post", "highlight_words": ["1-3 key words or short product names from the headline to visually emphasize, e.g. product names, brand names, or standout numbers"]}]`;
 }
 
 function buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyleParam){
@@ -2357,6 +2366,7 @@ async function runGeneration({ topicFocus = null, maxItems = '1' } = {}){
     imageData: null,
     status: 'draft',
     createdAt: now,
+    publishedDate: it.published_date || '',
     origin: topicFocus ? 'custom' : 'auto'
   }));
 }
@@ -2471,8 +2481,8 @@ async function generateDrafts(){
             const rangeText = `from ${chunk.start.toDateString()} through ${chunk.end.toDateString()}`;
             genLabel.innerHTML = `<span class="spinner"></span> ${source} — week ${wi + 1}/${weekChunks.length} (source ${si + 1}/${sources.length})`;
             setStatus(`Searching ${source}, ${rangeText}… (call ${callIndex}/${totalCalls})`);
-            const scopeConstraint = `Only use this one source: ${source}. Do not use any other outlet. Find ALL relevant PC hardware/component news AND notable game updates/releases this specific outlet published ${rangeText}. Return EVERY qualifying story published in that exact window — this is a narrow one-week slice, so completeness matters more than picking just the "best" one.`;
-            const userPrompt = `Find every PC hardware/component AND gaming news article "${source}" published ${rangeText}, and write the Facebook caption drafts as specified for each one. Include hardware news AND any notable game updates, patches, or releases covered by this source.`;
+            const scopeConstraint = `Only use this one source: ${source}. Do not use any other outlet. Find ALL relevant PC hardware/component news AND notable game updates/releases this specific outlet published ${rangeText}. Only include articles confirmed to be published within this date range — skip any article published before the start of the current month. Return EVERY qualifying story published in that exact window — completeness matters more than picking just the "best" one.`;
+            const userPrompt = `Find every PC hardware/component AND gaming news article "${source}" published ${rangeText}, and write the Facebook caption drafts as specified for each one. Include hardware news AND any notable game updates, patches, or releases covered by this source. Skip any article not published within ${rangeText}.`;
             const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyle);
             try{
               const sourceItems = await fetchNewsBatch(systemPrompt, userPrompt);
@@ -2493,8 +2503,8 @@ async function generateDrafts(){
           const rangeText = `from ${chunk.start.toDateString()} through ${chunk.end.toDateString()}`;
           genLabel.innerHTML = `<span class="spinner"></span> Searching week ${wi + 1}/${weekChunks.length}…`;
           setStatus(`Searching hardware news, ${rangeText}… (week ${wi + 1}/${weekChunks.length})`);
-          const scopeConstraint = `Search broadly across reputable tech hardware outlets AND gaming news sites. Find ALL relevant PC hardware/component news AND notable game updates/releases published ${rangeText}. Return every qualifying story from that window, not just the top one or two.`;
-          const userPrompt = `Find PC hardware/component AND gaming news published ${rangeText} and write the Facebook caption drafts as specified. Include a mix: mostly hardware news, with 1-2 notable game updates or releases per batch. Return every distinct qualifying article from that window.`;
+          const scopeConstraint = `Search broadly across reputable tech hardware outlets AND gaming news sites. Find ALL relevant PC hardware/component news AND notable game updates/releases published ${rangeText}. Only include articles confirmed published within this range — skip anything older. Return every qualifying story from that window, not just the top one or two.`;
+          const userPrompt = `Find PC hardware/component AND gaming news published ${rangeText} and write the Facebook caption drafts as specified. Include a mix: mostly hardware news, with 1-2 notable game updates or releases per batch. Skip any article not published within ${rangeText}. Return every distinct qualifying article from that window.`;
           const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyle);
           try{
             const weekItems = await fetchNewsBatch(systemPrompt, userPrompt);
@@ -2506,13 +2516,15 @@ async function generateDrafts(){
         }
       }
     } else {
-      // Quick "today" mode — one combined call, fast, for daily checks.
-      setStatus(`Fetching today's PC hardware/component + gaming news…`);
-      const dateRangeText = `today, ${today.toDateString()}`;
+      // Monthly mode — fetch best stories published this calendar month.
+      const monthLabel = today.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toDateString();
+      const dateRangeText = `within ${monthLabel} (${monthStart} to ${today.toDateString()})`;
+      setStatus(`Fetching ${monthLabel} PC hardware + gaming news…`);
       const scopeConstraint = sources.length > 0
-        ? `Only use these sources — search site-by-site if needed, and skip any story you can't attribute to one of them: ${sources.join(', ')}. Do not use any other outlet. Find PC hardware/component news AND notable game updates/releases published ${dateRangeText}.`
-        : `Search broadly across reputable tech hardware outlets AND gaming news sites (IGN, Kotaku, PC Gamer, GameSpot, Polygon, or similar). Find PC hardware/component news AND notable game updates/releases/announcements published ${dateRangeText}.`;
-      const userPrompt = `Find today's tech and gaming news and write the Facebook caption drafts as specified. Today's date is ${today.toDateString()}. Return a MIX: 4-5 items about PC hardware/components, and 1-2 items about notable game updates, patches, releases, or announcements (any platform: PC, console, or mobile). Total: 5-7 items.`;
+        ? `Only use these sources: ${sources.join(', ')}. Find PC hardware/component news AND notable game updates/releases published ${dateRangeText}. Skip anything published before ${monthStart}.`
+        : `Search broadly across reputable tech hardware outlets AND gaming news sites (IGN, Kotaku, PC Gamer, GameSpot, Polygon, or similar). Find PC hardware/component news AND notable game updates/releases/announcements published ${dateRangeText}. Skip anything published before ${monthStart}.`;
+      const userPrompt = `Find this month's tech and gaming news and write the Facebook caption drafts as specified. Today is ${today.toDateString()}. Only include articles published ${dateRangeText}. Return a MIX: 4-5 items about PC hardware/components, and 1-2 items about notable game updates, patches, releases, or announcements (any platform: PC, console, or mobile). Total: 5-7 items.`;
       const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyle);
       items = await fetchNewsBatch(systemPrompt, userPrompt);
     }
@@ -2606,6 +2618,7 @@ const newDrafts = freshItems.map((it, i) => {
         source: it.source || '',
         url,
         category: it.category || 'General',
+        publishedDate: it.published_date || '',
         caption: captionWithSource,
         graphicCaption: graphicCap,
         highlight_words: Array.isArray(it.highlight_words) ? it.highlight_words : [],
