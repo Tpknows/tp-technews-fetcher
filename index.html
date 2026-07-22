@@ -55,6 +55,64 @@
 
   main{ max-width: 720px; margin: 0 auto; padding: 20px; }
 
+  .app-shell{ display: flex; align-items: flex-start; }
+  .content-col{ flex: 1; min-width: 0; }
+  .sidebar{
+    width: 232px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    padding: 22px 0 40px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+  .sidebar-brand{ padding: 0 20px 20px; }
+  .sidebar-brand-name{
+    font-family: 'Sora', sans-serif; font-weight: 800; font-size: 16px;
+    color: var(--text); letter-spacing: 0.01em;
+  }
+  .sidebar-brand-sub{
+    font-family: 'IBM Plex Mono', monospace; font-size: 10.5px;
+    color: var(--text-dim); letter-spacing: 0.06em; text-transform: uppercase;
+    margin-top: 4px;
+  }
+  .sidebar-section-label{
+    font-family: 'IBM Plex Mono', monospace; font-size: 10.5px;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-dim); padding: 18px 20px 8px;
+  }
+  .sidebar-item{
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; text-align: left;
+    background: transparent; border: none;
+    color: var(--text-dim);
+    font-family: 'Sora', sans-serif; font-size: 13.5px; font-weight: 600;
+    padding: 10px 20px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+  }
+  .sidebar-item:hover{ background: var(--panel-2); color: var(--text); }
+  .sidebar-item.active{
+    background: var(--trace-dim);
+    color: #fff;
+    border-left-color: var(--trace);
+  }
+
+  @media (max-width: 780px){
+    .app-shell{ flex-direction: column; }
+    .sidebar{
+      width: 100%; height: auto; position: static;
+      border-right: none; border-bottom: 1px solid var(--line);
+      padding: 14px 0;
+    }
+    .sidebar-brand{ padding: 0 16px 12px; }
+    .sidebar-section-label{ padding: 10px 16px 6px; }
+    .sidebar-item{ padding: 9px 16px; }
+  }
+
+
   .controls{
     display:flex; gap:10px; align-items:center; flex-wrap: wrap;
     margin-bottom: 18px;
@@ -311,6 +369,33 @@
     margin-bottom: 10px;
   }
   .graphic-canvas-wrap canvas{ width: 100%; height: auto; display: block; }
+
+  .graphic-customize{
+    margin-top: 12px;
+    border-top: 1px dashed var(--line);
+    padding-top: 12px;
+  }
+  .graphic-customize summary{
+    cursor: pointer;
+    list-style: none;
+    font-family: 'Sora', sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-dim);
+    padding: 4px 0;
+    user-select: none;
+  }
+  .graphic-customize summary::-webkit-details-marker{ display: none; }
+  .graphic-customize summary::before{
+    content: '▸';
+    display: inline-block;
+    margin-right: 6px;
+    transition: transform 0.15s ease;
+  }
+  .graphic-customize[open] summary::before{ transform: rotate(90deg); }
+  .graphic-customize summary:hover{ color: var(--text); }
+  .graphic-customize-inner{ padding-top: 12px; }
+
   .image-position-controls{
     max-width: 320px; margin-bottom: 12px;
     display: flex; flex-direction: column; gap: 6px;
@@ -348,6 +433,27 @@
 </head>
 <body>
 
+<div class="app-shell">
+  <nav class="sidebar">
+    <div class="sidebar-brand">
+      <div class="sidebar-brand-name">⚡ TP Tech News</div>
+      <div class="sidebar-brand-sub">Draft queue</div>
+    </div>
+    <div class="sidebar-nav" id="tabs">
+      <div class="sidebar-section-label">Drafts</div>
+      <button class="sidebar-item active" data-filter="all">📋 All</button>
+      <button class="sidebar-item" data-filter="draft">📝 Draft</button>
+      <button class="sidebar-item" data-filter="approved">✅ Approved</button>
+      <button class="sidebar-item" data-filter="posted">📤 Posted</button>
+      <button class="sidebar-item" data-filter="games">🎮 Games</button>
+      <div class="sidebar-section-label">Tools</div>
+      <button class="sidebar-item" data-filter="rss-news">📡 RSS News</button>
+      <button class="sidebar-item" data-filter="custom-news">⚙️ Custom News</button>
+      <button class="sidebar-item" data-filter="history">🕒 History</button>
+    </div>
+  </nav>
+
+  <div class="content-col">
 <header>
   <div class="header-inner">
     <div class="eyebrow">Draft queue · not auto-posted</div>
@@ -407,6 +513,11 @@
         <button id="sourceAddBtn">Add</button>
       </div>
       <p class="source-hint">Drafts will only pull from sites in this list. Remove all to search broadly again.</p>
+      <p class="source-hint" style="margin-top:10px;">📡 RSS News tab pulls from whichever of these sources have a known feed (Tom's Hardware, Videocardz, TechPowerUp, Wccftech, Notebookcheck, YugaTech). Optional free <a href="https://rss2json.com" target="_blank" rel="noopener">rss2json.com</a> API key if you hit rate limits:</p>
+      <div class="source-add">
+        <input type="text" id="rss2jsonKeyInput" placeholder="rss2json API key (optional)">
+        <button id="rss2jsonKeySaveBtn">Save</button>
+      </div>
     </div>
   </div>
 
@@ -421,19 +532,12 @@
     <button class="btn-ghost" id="syncBtn" title="Push all current drafts to the connected Google Sheet">
       <span id="syncLabel">📤 Sync to Sheet</span>
     </button>
-    <div class="tabs" id="tabs">
-      <button class="btn-ghost active" data-filter="all">All</button>
-      <button class="btn-ghost" data-filter="draft">Draft</button>
-      <button class="btn-ghost" data-filter="approved">Approved</button>
-      <button class="btn-ghost" data-filter="posted">Posted</button>
-      <button class="btn-ghost" data-filter="games">🎮 Games</button>
-      <button class="btn-ghost" data-filter="history">🕒 History</button>
-      <button class="btn-ghost" data-filter="custom-news">⚙️ Custom News</button>
-    </div>
   </div>
   <div class="status-line" id="statusLine"></div>
   <div id="feed"></div>
 </main>
+  </div>
+</div>
 
 <script>
 let PAGE_NAME = "tpknows"; // kept in sync with the active template's handle — used in AI prompts too
@@ -448,19 +552,66 @@ let activeTemplateId = null;
 let customNewsTopics = []; // array of strings e.g. ["GPU", "DDR5", "Budget builds"]
 let customNewsEnabled = false;
 
+// ── RSS News tab ─────────────────────────────────────────────────────────
+// Live article feed pulled straight from each trusted source's RSS feed via
+// rss2json (bypasses CORS since browsers can't fetch raw XML cross-origin).
+// This is fresher than AI web-search grounding since it's the source's own
+// feed, updated the moment they publish — good for catching breaking news
+// before Gemini's search index picks it up.
+const SOURCE_RSS_FEEDS = {
+  "Tom's Hardware": 'https://www.tomshardware.com/feeds/all',
+  "Videocardz": 'https://videocardz.com/feed',
+  "TechPowerUp": 'https://www.techpowerup.com/rss/news',
+  "Wccftech": 'https://wccftech.com/feed/',
+  "Notebookcheck": 'https://www.notebookcheck.net/.rss/en-all/',
+  "YugaTech": 'https://www.yugatech.com/feed/'
+};
+let rssArticles = [];
+let rssLoading = false;
+let rssLastFetched = 0;
+const RSS_CACHE_MS = 15 * 60 * 1000; // 15 min — rss2json free tier rate-limits frequent re-fetches
+let rss2jsonApiKey = ''; // optional — get a free one at rss2json.com if you hit rate limits
+
+async function saveRssSettingsToLocal(){
+  try{
+    localStorage.setItem('tp_rss_settings', JSON.stringify({ apiKey: rss2jsonApiKey }));
+  }catch(e){ console.warn('RSS settings save failed:', e); }
+}
+async function loadRssSettingsFromLocal(){
+  try{
+    const raw = localStorage.getItem('tp_rss_settings');
+    if(raw){
+      const d = JSON.parse(raw);
+      rss2jsonApiKey = d.apiKey || '';
+    }
+  }catch(e){ console.warn('RSS settings load failed:', e); }
+}
+
+const rss2jsonKeyInput = document.getElementById('rss2jsonKeyInput');
+const rss2jsonKeySaveBtn = document.getElementById('rss2jsonKeySaveBtn');
+if(rss2jsonKeySaveBtn){
+  rss2jsonKeySaveBtn.addEventListener('click', async () => {
+    rss2jsonApiKey = rss2jsonKeyInput.value.trim();
+    await saveRssSettingsToLocal();
+    rss2jsonKeySaveBtn.textContent = 'Saved ✓';
+    setTimeout(() => { rss2jsonKeySaveBtn.textContent = 'Save'; }, 1500);
+    rssLastFetched = 0; // force a fresh fetch next time the RSS tab loads, using the new key
+  });
+}
+
 // ── Local persistent storage helpers ───────────────────────────────────────
 // Saves template list + activeTemplateId locally so the dropdown persists
 // across reloads even before Google Sheet loads.
 async function saveTemplatesToLocal(){
   try{
-    await window.storage.set('tp_templates', JSON.stringify({ templates, activeTemplateId }));
+    localStorage.setItem('tp_templates', JSON.stringify({ templates, activeTemplateId }));
   }catch(e){ console.warn('Local template save failed:', e); }
 }
 async function loadTemplatesFromLocal(){
   try{
-    const r = await window.storage.get('tp_templates');
-    if(r && r.value){
-      const d = JSON.parse(r.value);
+    const raw = localStorage.getItem('tp_templates');
+    if(raw){
+      const d = JSON.parse(raw);
       if(Array.isArray(d.templates) && d.templates.length) templates = d.templates;
       if(d.activeTemplateId) activeTemplateId = d.activeTemplateId;
     }
@@ -468,14 +619,14 @@ async function loadTemplatesFromLocal(){
 }
 async function saveCustomNewsToLocal(){
   try{
-    await window.storage.set('tp_custom_news', JSON.stringify({ topics: customNewsTopics, enabled: customNewsEnabled }));
+    localStorage.setItem('tp_custom_news', JSON.stringify({ topics: customNewsTopics, enabled: customNewsEnabled }));
   }catch(e){ console.warn('Custom news save failed:', e); }
 }
 async function loadCustomNewsFromLocal(){
   try{
-    const r = await window.storage.get('tp_custom_news');
-    if(r && r.value){
-      const d = JSON.parse(r.value);
+    const raw = localStorage.getItem('tp_custom_news');
+    if(raw){
+      const d = JSON.parse(raw);
       if(Array.isArray(d.topics)) customNewsTopics = d.topics;
       customNewsEnabled = !!d.enabled;
     }
@@ -878,6 +1029,130 @@ async function addToHistory(newDrafts){
   }
 }
 
+// Fetches one RSS feed via rss2json and returns its items (or [] on any
+// failure — a single source being blocked/rate-limited shouldn't break the
+// whole tab, the others just show up without it).
+async function fetchRssFeed(sourceName, feedUrl){
+  try{
+    const params = new URLSearchParams({ rss_url: feedUrl, count: '15' });
+    if(rss2jsonApiKey) params.set('api_key', rss2jsonApiKey);
+    const res = await fetch(`https://api.rss2json.com/v1/api.json?${params.toString()}`);
+    const data = await res.json();
+    if(data.status !== 'ok' || !Array.isArray(data.items)) return [];
+    return data.items.map(item => ({
+      title: (item.title || '').trim(),
+      link: item.link || '',
+      source: sourceName,
+      pubDate: item.pubDate || '',
+      thumbnail: item.thumbnail || (item.enclosure && item.enclosure.link) || ''
+    }));
+  }catch(e){
+    console.warn(`RSS fetch failed for ${sourceName}:`, e);
+    return [];
+  }
+}
+
+// Pulls fresh articles from every trusted source that has a known RSS feed
+// (falls back to all of SOURCE_RSS_FEEDS if the user's trusted-sources list
+// is empty), combines them, dedupes by link, sorts newest-first, and caches
+// for RSS_CACHE_MS so switching tabs repeatedly doesn't hammer rss2json's
+// free-tier rate limit.
+async function loadRssNews(force = false){
+  const now = Date.now();
+  if(!force && rssArticles.length && (now - rssLastFetched) < RSS_CACHE_MS) return;
+  rssLoading = true;
+  renderRssNews();
+
+  const candidateNames = sources.length
+    ? sources.filter(s => SOURCE_RSS_FEEDS[s])
+    : Object.keys(SOURCE_RSS_FEEDS);
+
+  const results = await Promise.all(
+    candidateNames.map(name => fetchRssFeed(name, SOURCE_RSS_FEEDS[name]))
+  );
+
+  const seen = new Set();
+  const combined = [];
+  results.flat().forEach(item => {
+    if(!item.link || seen.has(item.link)) return;
+    seen.add(item.link);
+    combined.push(item);
+  });
+  combined.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+
+  rssArticles = combined;
+  rssLastFetched = now;
+  rssLoading = false;
+  renderRssNews();
+}
+
+function renderRssNews(){
+  const feed = document.getElementById('feed');
+  const knownCount = sources.length
+    ? sources.filter(s => SOURCE_RSS_FEEDS[s]).length
+    : Object.keys(SOURCE_RSS_FEEDS).length;
+
+  if(rssLoading && !rssArticles.length){
+    feed.innerHTML = `<div class="history-empty">📡 Kinukuha ang latest articles mula sa ${knownCount} sources…</div>`;
+    return;
+  }
+  if(!rssArticles.length){
+    feed.innerHTML = `<div class="history-empty">📭 Walang nakuhang articles. Baka rate-limited ang rss2json — subukan ulit mamaya, or magdagdag ng free API key sa RSS settings.<br><br><button class="mini-btn" id="rssRetryBtn">🔄 Subukan ulit</button></div>`;
+    document.getElementById('rssRetryBtn')?.addEventListener('click', () => loadRssNews(true));
+    return;
+  }
+
+  feed.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+      <span style="font-size:12px; color:var(--text-dim);">📡 ${rssArticles.length} articles from ${knownCount} sources · updated ${new Date(rssLastFetched).toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit'})}</span>
+      <button class="mini-btn" id="rssRefreshBtn">🔄 Refresh</button>
+    </div>
+  ` + rssArticles.map((a, i) => `
+    <div class="card" style="margin-bottom:10px;">
+      <div class="card-meta">
+        <span class="source-line">${escapeHtml(a.source)}${a.pubDate ? ` · ${escapeHtml(new Date(a.pubDate).toLocaleString('en-PH', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}))}` : ''}</span>
+      </div>
+      <div class="card-headline" style="margin-top:4px;">
+        <a href="${escapeHtml(a.link)}" target="_blank" rel="noopener" style="color:inherit; text-decoration:none;">${escapeHtml(a.title)}</a>
+      </div>
+      <div class="card-actions" style="margin-top:10px;">
+        <button class="mini-btn use-rss-article" data-index="${i}">✍️ Gamitin bilang source ng draft</button>
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('rssRefreshBtn')?.addEventListener('click', () => loadRssNews(true));
+  feed.querySelectorAll('.use-rss-article').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const article = rssArticles[parseInt(btn.dataset.index, 10)];
+      if(!article) return;
+      btn.disabled = true;
+      btn.textContent = 'Gumagawa ng draft…';
+      try{
+        const newDrafts = await runGeneration({ topicFocus: article.link });
+        if(newDrafts.length){
+          drafts = [...newDrafts, ...drafts];
+          await saveDrafts(true);
+          currentFilter = 'all';
+          [...tabs.children].forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
+          render();
+          autoFetchPhotos(newDrafts);
+          setStatus(`Ginawang draft: "${newDrafts[0].headline}"`);
+        } else {
+          setStatus('Hindi nakabuo ng draft para dito — subukan ulit.', true);
+          btn.disabled = false;
+          btn.textContent = '✍️ Gamitin bilang source ng draft';
+        }
+      }catch(err){
+        console.error(err);
+        setStatus('May problema sa paggawa ng draft mula sa article na ito.', true);
+        btn.disabled = false;
+        btn.textContent = '✍️ Gamitin bilang source ng draft';
+      }
+    });
+  });
+}
+
 function renderHistory(){
   const feed = document.getElementById('feed');
   if(!history_sessions.length){
@@ -1139,62 +1414,69 @@ function render(){
         </div>
         <h3 class="headline">${escapeHtml(d.headline)}</h3>
         <p class="source-line">${escapeHtml(d.source || '')}${d.url ? ` · <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">source ↗</a>` : ''}${d.publishedDate ? ` · <span style="display:inline-flex;align-items:center;gap:3px;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-size:11px;color:var(--text-dim);font-family:'IBM Plex Mono',monospace;">📅 ${escapeHtml(d.publishedDate)}</span>` : '<span style="display:inline-flex;align-items:center;gap:3px;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-size:11px;color:#666;font-family:\'IBM Plex Mono\',monospace;opacity:0.5;">📅 date unknown</span>'}</p>
-        <span class="graphic-label" style="margin-top:10px;">Caption for graphic (text on image)</span>
-        <textarea data-id="${d.id}" class="graphic-caption-input" style="margin-bottom:12px;">${escapeHtml(d.graphicCaption != null ? d.graphicCaption : d.caption)}</textarea>
-        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
-          <label style="font-size:12px; color:var(--text-dim); white-space:nowrap;">Font
-            <select data-id="${d.id}" class="graphic-font-select" style="margin-left:6px; background:var(--panel-2); border:1px solid var(--line); border-radius:7px; color:var(--text); font-size:13px; padding:6px 8px;">
-              ${FONT_OPTIONS.map(f => `<option value="${f.value}" ${(d.fontFamily || FONT_OPTIONS[0].value) === f.value ? 'selected' : ''}>${f.label}</option>`).join('')}
-            </select>
-          </label>
-          <label style="font-size:12px; color:var(--text-dim); white-space:nowrap;">Size
-            <input type="number" data-id="${d.id}" class="graphic-font-size" min="18" max="90" placeholder="Auto" value="${d.fontSizeOverride || ''}" style="width:64px; margin-left:6px; background:var(--panel-2); border:1px solid var(--line); border-radius:7px; color:var(--text); font-size:13px; padding:6px 8px;">
-          </label>
-          ${d.fontSizeOverride ? `<button class="mini-btn" data-action="reset-font-size" data-id="${d.id}" style="font-size:12px;">Reset to auto</button>` : ''}
-        </div>
         <span class="graphic-label">Caption for Facebook post/feed</span>
         <textarea data-id="${d.id}" class="caption-input">${escapeHtml(d.caption)}</textarea>
         <div class="graphic-block">
           <span class="graphic-label">Post graphic</span>
-          ${graphicStyle === 'overlay' ? `
-          <span class="graphic-label" style="margin-top:0;">Category tag (shown on the photo)</span>
-          <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
-            <input type="text" data-id="${d.id}" class="category-label-input" value="${escapeHtml(d.categoryLabel || d.category || '')}" maxlength="24" style="flex:1; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:'Sora',sans-serif; font-size:13px; padding:9px 11px;">
-            <input type="color" data-id="${d.id}" class="tag-color-input" value="${d.tagColor || getCategoryStyle(d.category).color}" title="Tag pill color" style="width:38px; height:38px; padding:2px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; cursor:pointer;">
-          </div>
-          <div style="display:flex; gap:6px; flex-wrap:wrap; margin:-6px 0 12px;">
-            ${TAG_COLOR_PRESETS.map(p => `<button type="button" class="mini-btn tag-color-preset" data-action="tag-color-preset" data-id="${d.id}" data-color="${p.color}" data-label="${p.label}" style="font-size:11px; padding:4px 9px; display:flex; align-items:center; gap:5px;"><span style="width:9px; height:9px; border-radius:50%; background:${p.color}; display:inline-block;"></span>${p.label}</button>`).join('')}
-          </div>
-          ` : ''}
           <div class="graphic-canvas-wrap" id="canvasWrap-${d.id}">
             <canvas id="canvas-${d.id}" width="1080" height="1080"></canvas>
           </div>
-          ${d.imageData ? `
-          <div class="image-position-controls">
-            <div class="image-position-row">
-              <label>↔ Horizontal</label>
-              <input type="range" min="0" max="100" value="${Math.round((d.imageOffsetX != null ? d.imageOffsetX : 0.5) * 100)}" class="image-offset-x" data-id="${d.id}">
-            </div>
-            <div class="image-position-row">
-              <label>↕ Vertical</label>
-              <input type="range" min="0" max="100" value="${Math.round((d.imageOffsetY != null ? d.imageOffsetY : 0.5) * 100)}" class="image-offset-y" data-id="${d.id}">
-            </div>
-          </div>
-          ` : ''}
           <div class="graphic-controls">
             <label class="file-btn">📷 ${d.imageData ? 'Replace with real photo' : 'Use a real photo instead'}
               <input type="file" accept="image/*" class="photo-input" data-id="${d.id}">
             </label>
             ${(!d.imageData && d.imageUrl) ? `<button class="mini-btn fetch-photo" data-action="fetch-photo" data-id="${d.id}">🔗 Try fetch from article</button>` : ''}
-            <button class="mini-btn genprompt" data-action="gen-prompt" data-id="${d.id}">${d.generatingPrompt ? '<span class="spinner spinner-dark"></span> Generating…' : (d.imagePrompt ? '🎨 Regenerate image prompt' : '🎨 Generate image prompt (ChatGPT)')}</button>
             <button class="mini-btn download" data-action="download" data-id="${d.id}">Download PNG</button>
           </div>
-          ${d.imagePrompt ? `
-          <div class="prompt-box">
-            <span class="graphic-label">AI image prompt (paste into ChatGPT / DALL·E image generator)</span>
-            <textarea class="prompt-output" readonly rows="4">${escapeHtml(d.imagePrompt)}</textarea>
-            <button class="mini-btn copy-prompt ${d.promptCopied ? 'copied' : ''}" data-action="copy-prompt" data-id="${d.id}">${d.promptCopied ? 'Copied ✓' : '📋 Copy prompt'}</button>
-          </div>` : ''}
+          <details class="graphic-customize">
+            <summary>🎨 Customize graphic</summary>
+            <div class="graphic-customize-inner">
+              <span class="graphic-label" style="margin-top:0;">Caption for graphic (text on image)</span>
+              <textarea data-id="${d.id}" class="graphic-caption-input" style="margin-bottom:12px;">${escapeHtml(d.graphicCaption != null ? d.graphicCaption : d.caption)}</textarea>
+              <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
+                <label style="font-size:12px; color:var(--text-dim); white-space:nowrap;">Font
+                  <select data-id="${d.id}" class="graphic-font-select" style="margin-left:6px; background:var(--panel-2); border:1px solid var(--line); border-radius:7px; color:var(--text); font-size:13px; padding:6px 8px;">
+                    ${FONT_OPTIONS.map(f => `<option value="${f.value}" ${(d.fontFamily || FONT_OPTIONS[0].value) === f.value ? 'selected' : ''}>${f.label}</option>`).join('')}
+                  </select>
+                </label>
+                <label style="font-size:12px; color:var(--text-dim); white-space:nowrap;">Size
+                  <input type="number" data-id="${d.id}" class="graphic-font-size" min="18" max="90" placeholder="Auto" value="${d.fontSizeOverride || ''}" style="width:64px; margin-left:6px; background:var(--panel-2); border:1px solid var(--line); border-radius:7px; color:var(--text); font-size:13px; padding:6px 8px;">
+                </label>
+                ${d.fontSizeOverride ? `<button class="mini-btn" data-action="reset-font-size" data-id="${d.id}" style="font-size:12px;">Reset to auto</button>` : ''}
+              </div>
+              ${graphicStyle === 'overlay' ? `
+              <span class="graphic-label" style="margin-top:0;">Category tag (shown on the photo)</span>
+              <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+                <input type="text" data-id="${d.id}" class="category-label-input" value="${escapeHtml(d.categoryLabel || d.category || '')}" maxlength="24" style="flex:1; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:'Sora',sans-serif; font-size:13px; padding:9px 11px;">
+                <input type="color" data-id="${d.id}" class="tag-color-input" value="${d.tagColor || getCategoryStyle(d.category).color}" title="Tag pill color" style="width:38px; height:38px; padding:2px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; cursor:pointer;">
+              </div>
+              <div style="display:flex; gap:6px; flex-wrap:wrap; margin:-6px 0 14px;">
+                ${TAG_COLOR_PRESETS.map(p => `<button type="button" class="mini-btn tag-color-preset" data-action="tag-color-preset" data-id="${d.id}" data-color="${p.color}" data-label="${p.label}" style="font-size:11px; padding:4px 9px; display:flex; align-items:center; gap:5px;"><span style="width:9px; height:9px; border-radius:50%; background:${p.color}; display:inline-block;"></span>${p.label}</button>`).join('')}
+              </div>
+              ` : ''}
+              ${d.imageData ? `
+              <div class="image-position-controls">
+                <div class="image-position-row">
+                  <label>↔ Horizontal</label>
+                  <input type="range" min="0" max="100" value="${Math.round((d.imageOffsetX != null ? d.imageOffsetX : 0.5) * 100)}" class="image-offset-x" data-id="${d.id}">
+                </div>
+                <div class="image-position-row">
+                  <label>↕ Vertical</label>
+                  <input type="range" min="0" max="100" value="${Math.round((d.imageOffsetY != null ? d.imageOffsetY : 0.5) * 100)}" class="image-offset-y" data-id="${d.id}">
+                </div>
+              </div>
+              ` : ''}
+              <div class="graphic-controls" style="margin-top:4px;">
+                <button class="mini-btn genprompt" data-action="gen-prompt" data-id="${d.id}">${d.generatingPrompt ? '<span class="spinner spinner-dark"></span> Generating…' : (d.imagePrompt ? '🎨 Regenerate image prompt' : '🎨 Generate image prompt (ChatGPT)')}</button>
+              </div>
+              ${d.imagePrompt ? `
+              <div class="prompt-box">
+                <span class="graphic-label">AI image prompt (paste into ChatGPT / DALL·E image generator)</span>
+                <textarea class="prompt-output" readonly rows="4">${escapeHtml(d.imagePrompt)}</textarea>
+                <button class="mini-btn copy-prompt ${d.promptCopied ? 'copied' : ''}" data-action="copy-prompt" data-id="${d.id}">${d.promptCopied ? 'Copied ✓' : '📋 Copy prompt'}</button>
+              </div>` : ''}
+            </div>
+          </details>
         </div>
         <div class="card-actions">
           <button class="mini-btn copy" data-action="copy" data-id="${d.id}">Copy feed caption</button>
@@ -2238,6 +2520,8 @@ tabs.addEventListener('click', async (e) => {
   [...tabs.children].forEach(b => b.classList.toggle('active', b === btn));
   if(currentFilter === 'history'){
     renderHistory();
+  } else if(currentFilter === 'rss-news'){
+    loadRssNews(); // cached — only re-fetches if stale or forced via Refresh button
   } else {
     render();
   }
@@ -2672,6 +2956,8 @@ genBtn.addEventListener('click', generateDrafts);
   // Load templates + custom news from local storage first for instant UI
   await loadTemplatesFromLocal();
   await loadCustomNewsFromLocal();
+  await loadRssSettingsFromLocal();
+  if(rss2jsonKeyInput && rss2jsonApiKey) rss2jsonKeyInput.value = rss2jsonApiKey;
   if(templates.length) renderTemplates();
 
   setStatus('Loading your drafts and settings from Google Sheet…');
