@@ -55,64 +55,6 @@
 
   main{ max-width: 720px; margin: 0 auto; padding: 20px; }
 
-  .app-shell{ display: flex; align-items: flex-start; }
-  .content-col{ flex: 1; min-width: 0; }
-  .sidebar{
-    width: 232px;
-    flex-shrink: 0;
-    background: var(--panel);
-    border-right: 1px solid var(--line);
-    padding: 22px 0 40px;
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    overflow-y: auto;
-  }
-  .sidebar-brand{ padding: 0 20px 20px; }
-  .sidebar-brand-name{
-    font-family: 'Sora', sans-serif; font-weight: 800; font-size: 16px;
-    color: var(--text); letter-spacing: 0.01em;
-  }
-  .sidebar-brand-sub{
-    font-family: 'IBM Plex Mono', monospace; font-size: 10.5px;
-    color: var(--text-dim); letter-spacing: 0.06em; text-transform: uppercase;
-    margin-top: 4px;
-  }
-  .sidebar-section-label{
-    font-family: 'IBM Plex Mono', monospace; font-size: 10.5px;
-    letter-spacing: 0.08em; text-transform: uppercase;
-    color: var(--text-dim); padding: 18px 20px 8px;
-  }
-  .sidebar-item{
-    display: flex; align-items: center; gap: 10px;
-    width: 100%; text-align: left;
-    background: transparent; border: none;
-    color: var(--text-dim);
-    font-family: 'Sora', sans-serif; font-size: 13.5px; font-weight: 600;
-    padding: 10px 20px;
-    cursor: pointer;
-    border-left: 3px solid transparent;
-  }
-  .sidebar-item:hover{ background: var(--panel-2); color: var(--text); }
-  .sidebar-item.active{
-    background: var(--trace-dim);
-    color: #fff;
-    border-left-color: var(--trace);
-  }
-
-  @media (max-width: 780px){
-    .app-shell{ flex-direction: column; }
-    .sidebar{
-      width: 100%; height: auto; position: static;
-      border-right: none; border-bottom: 1px solid var(--line);
-      padding: 14px 0;
-    }
-    .sidebar-brand{ padding: 0 16px 12px; }
-    .sidebar-section-label{ padding: 10px 16px 6px; }
-    .sidebar-item{ padding: 9px 16px; }
-  }
-
-
   .controls{
     display:flex; gap:10px; align-items:center; flex-wrap: wrap;
     margin-bottom: 18px;
@@ -369,33 +311,6 @@
     margin-bottom: 10px;
   }
   .graphic-canvas-wrap canvas{ width: 100%; height: auto; display: block; }
-
-  .graphic-customize{
-    margin-top: 12px;
-    border-top: 1px dashed var(--line);
-    padding-top: 12px;
-  }
-  .graphic-customize summary{
-    cursor: pointer;
-    list-style: none;
-    font-family: 'Sora', sans-serif;
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--text-dim);
-    padding: 4px 0;
-    user-select: none;
-  }
-  .graphic-customize summary::-webkit-details-marker{ display: none; }
-  .graphic-customize summary::before{
-    content: '▸';
-    display: inline-block;
-    margin-right: 6px;
-    transition: transform 0.15s ease;
-  }
-  .graphic-customize[open] summary::before{ transform: rotate(90deg); }
-  .graphic-customize summary:hover{ color: var(--text); }
-  .graphic-customize-inner{ padding-top: 12px; }
-
   .image-position-controls{
     max-width: 320px; margin-bottom: 12px;
     display: flex; flex-direction: column; gap: 6px;
@@ -433,27 +348,6 @@
 </head>
 <body>
 
-<div class="app-shell">
-  <nav class="sidebar">
-    <div class="sidebar-brand">
-      <div class="sidebar-brand-name">⚡ TP Tech News</div>
-      <div class="sidebar-brand-sub">Draft queue</div>
-    </div>
-    <div class="sidebar-nav" id="tabs">
-      <div class="sidebar-section-label">Drafts</div>
-      <button class="sidebar-item active" data-filter="all">📋 All</button>
-      <button class="sidebar-item" data-filter="draft">📝 Draft</button>
-      <button class="sidebar-item" data-filter="approved">✅ Approved</button>
-      <button class="sidebar-item" data-filter="posted">📤 Posted</button>
-      <button class="sidebar-item" data-filter="games">🎮 Games</button>
-      <div class="sidebar-section-label">Tools</div>
-      <button class="sidebar-item" data-filter="rss-news">📡 RSS News</button>
-      <button class="sidebar-item" data-filter="custom-news">⚙️ Custom News</button>
-      <button class="sidebar-item" data-filter="history">🕒 History</button>
-    </div>
-  </nav>
-
-  <div class="content-col">
 <header>
   <div class="header-inner">
     <div class="eyebrow">Draft queue · not auto-posted</div>
@@ -483,17 +377,10 @@
           <button class="btn-ghost" data-align="center" title="Headline centered, boxed in the middle">Center</button>
         </div>
       </div>
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap;">
-        <span style="font-size:12px; color:var(--text-dim); white-space:nowrap; font-family:'IBM Plex Mono',monospace;">Quick select:</span>
-        <select id="templateQuickSelect" style="flex:1; min-width:160px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:'Sora',sans-serif; font-size:13px; padding:8px 10px;">
-          <option value="">— choose a page —</option>
-        </select>
-      </div>
       <div id="templateList"></div>
       <div class="template-add-row">
         <input type="text" id="templateNameInput" placeholder="Page name (e.g. TP Knows)" maxlength="40">
         <input type="text" id="templateHandleInput" placeholder="handle (no @)" maxlength="40" spellcheck="false">
-        <input type="text" id="templateHashtagsInput" placeholder="Default hashtags, comma-separated (e.g. TechPH, PCBuildPH)" style="flex:1 1 100%;">
         <input type="color" id="templateColorInput" value="#4ade80" title="Highlight/accent color for this page">
         <button id="templateAddBtn">Add</button>
       </div>
@@ -513,11 +400,6 @@
         <button id="sourceAddBtn">Add</button>
       </div>
       <p class="source-hint">Drafts will only pull from sites in this list. Remove all to search broadly again.</p>
-      <p class="source-hint" style="margin-top:10px;">📡 RSS News tab pulls from whichever of these sources have a known feed (Tom's Hardware, Videocardz, TechPowerUp, Wccftech, Notebookcheck, YugaTech). Optional free <a href="https://rss2json.com" target="_blank" rel="noopener">rss2json.com</a> API key if you hit rate limits:</p>
-      <div class="source-add">
-        <input type="text" id="rss2jsonKeyInput" placeholder="rss2json API key (optional)">
-        <button id="rss2jsonKeySaveBtn">Save</button>
-      </div>
     </div>
   </div>
 
@@ -532,12 +414,17 @@
     <button class="btn-ghost" id="syncBtn" title="Push all current drafts to the connected Google Sheet">
       <span id="syncLabel">📤 Sync to Sheet</span>
     </button>
+    <div class="tabs" id="tabs">
+      <button class="btn-ghost active" data-filter="all">All</button>
+      <button class="btn-ghost" data-filter="draft">Draft</button>
+      <button class="btn-ghost" data-filter="approved">Approved</button>
+      <button class="btn-ghost" data-filter="posted">Posted</button>
+      <button class="btn-ghost" data-filter="history">🕒 History</button>
+    </div>
   </div>
   <div class="status-line" id="statusLine"></div>
   <div id="feed"></div>
 </main>
-  </div>
-</div>
 
 <script>
 let PAGE_NAME = "tpknows"; // kept in sync with the active template's handle — used in AI prompts too
@@ -548,91 +435,6 @@ let PAGE_NAME = "tpknows"; // kept in sync with the active template's handle —
 let templates = [];
 let activeTemplateId = null;
 
-// Custom News settings: topics/keywords the user wants to focus on
-let customNewsTopics = []; // array of strings e.g. ["GPU", "DDR5", "Budget builds"]
-let customNewsEnabled = false;
-
-// ── RSS News tab ─────────────────────────────────────────────────────────
-// Live article feed pulled straight from each trusted source's RSS feed via
-// rss2json (bypasses CORS since browsers can't fetch raw XML cross-origin).
-// This is fresher than AI web-search grounding since it's the source's own
-// feed, updated the moment they publish — good for catching breaking news
-// before Gemini's search index picks it up.
-const SOURCE_RSS_FEEDS = {
-  "Tom's Hardware": 'https://www.tomshardware.com/feeds/all',
-  "Videocardz": 'https://videocardz.com/feed',
-  "TechPowerUp": 'https://www.techpowerup.com/rss/news',
-  "Wccftech": 'https://wccftech.com/feed/',
-  "Notebookcheck": 'https://www.notebookcheck.net/.rss/en-all/',
-  "YugaTech": 'https://www.yugatech.com/feed/'
-};
-let rssArticles = [];
-let rssLoading = false;
-let rssLastFetched = 0;
-const RSS_CACHE_MS = 15 * 60 * 1000; // 15 min — rss2json free tier rate-limits frequent re-fetches
-let rss2jsonApiKey = ''; // optional — get a free one at rss2json.com if you hit rate limits
-
-async function saveRssSettingsToLocal(){
-  try{
-    localStorage.setItem('tp_rss_settings', JSON.stringify({ apiKey: rss2jsonApiKey }));
-  }catch(e){ console.warn('RSS settings save failed:', e); }
-}
-async function loadRssSettingsFromLocal(){
-  try{
-    const raw = localStorage.getItem('tp_rss_settings');
-    if(raw){
-      const d = JSON.parse(raw);
-      rss2jsonApiKey = d.apiKey || '';
-    }
-  }catch(e){ console.warn('RSS settings load failed:', e); }
-}
-
-const rss2jsonKeyInput = document.getElementById('rss2jsonKeyInput');
-const rss2jsonKeySaveBtn = document.getElementById('rss2jsonKeySaveBtn');
-if(rss2jsonKeySaveBtn){
-  rss2jsonKeySaveBtn.addEventListener('click', async () => {
-    rss2jsonApiKey = rss2jsonKeyInput.value.trim();
-    await saveRssSettingsToLocal();
-    rss2jsonKeySaveBtn.textContent = 'Saved ✓';
-    setTimeout(() => { rss2jsonKeySaveBtn.textContent = 'Save'; }, 1500);
-    rssLastFetched = 0; // force a fresh fetch next time the RSS tab loads, using the new key
-  });
-}
-
-// ── Local persistent storage helpers ───────────────────────────────────────
-// Saves template list + activeTemplateId locally so the dropdown persists
-// across reloads even before Google Sheet loads.
-async function saveTemplatesToLocal(){
-  try{
-    localStorage.setItem('tp_templates', JSON.stringify({ templates, activeTemplateId }));
-  }catch(e){ console.warn('Local template save failed:', e); }
-}
-async function loadTemplatesFromLocal(){
-  try{
-    const raw = localStorage.getItem('tp_templates');
-    if(raw){
-      const d = JSON.parse(raw);
-      if(Array.isArray(d.templates) && d.templates.length) templates = d.templates;
-      if(d.activeTemplateId) activeTemplateId = d.activeTemplateId;
-    }
-  }catch(e){ console.warn('Local template load failed:', e); }
-}
-async function saveCustomNewsToLocal(){
-  try{
-    localStorage.setItem('tp_custom_news', JSON.stringify({ topics: customNewsTopics, enabled: customNewsEnabled }));
-  }catch(e){ console.warn('Custom news save failed:', e); }
-}
-async function loadCustomNewsFromLocal(){
-  try{
-    const raw = localStorage.getItem('tp_custom_news');
-    if(raw){
-      const d = JSON.parse(raw);
-      if(Array.isArray(d.topics)) customNewsTopics = d.topics;
-      customNewsEnabled = !!d.enabled;
-    }
-  }catch(e){ console.warn('Custom news load failed:', e); }
-}
-
 function getActiveTemplate(){
   return templates.find(t => t.id === activeTemplateId) || templates[0] || null;
 }
@@ -640,13 +442,7 @@ function getActiveTemplate(){
 function renderTemplates(){
   const list = document.getElementById('templateList');
   const count = document.getElementById('templatesCount');
-  const qs = document.getElementById('templateQuickSelect');
   count.textContent = `(${templates.length})`;
-
-  // Populate quick-select dropdown
-  qs.innerHTML = '<option value="">— choose a page —</option>' +
-    templates.map(t => `<option value="${t.id}" ${t.id === activeTemplateId ? 'selected' : ''}>@${escapeHtml(t.handle)} — ${escapeHtml(t.name)}</option>`).join('');
-
   if(templates.length === 0){
     list.innerHTML = `<span style="color:var(--text-dim);font-size:12.5px;">Wala pang template — magdagdag sa ibaba.</span>`;
     return;
@@ -662,39 +458,6 @@ function renderTemplates(){
   `).join('');
 }
 
-// Quick-select dropdown handler
-document.getElementById('templateQuickSelect').addEventListener('change', async (e) => {
-  const id = e.target.value;
-  if(!id) return;
-  activeTemplateId = id;
-  const t = getActiveTemplate();
-  if(t){
-    PAGE_NAME = t.handle;
-    injectPageHashtag(t.handle);
-  }
-  renderTemplates();
-  render();
-  await saveSettings();
-  await saveTemplatesToLocal();
-});
-
-// Injects/replaces the page hashtag in all current draft captions
-// so switching pages auto-updates the #hashtag in the feed text.
-function injectPageHashtag(handle){
-  if(!handle) return;
-  const tag = '#' + handle.replace(/^@+/, '').replace(/\s+/g, '').toLowerCase();
-  drafts.forEach(d => {
-    if(!d.caption) return;
-    // Replace any existing page tag (the last #word that matches our pattern) or append
-    const tagPattern = /#[a-zA-Z0-9_]+(?=\s*$)/;
-    if(tagPattern.test(d.caption)){
-      d.caption = d.caption.replace(tagPattern, tag);
-    } else {
-      d.caption = d.caption.trimEnd() + '\n' + tag;
-    }
-  });
-}
-
 document.getElementById('templateList').addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-action]');
   if(!btn) return;
@@ -702,14 +465,10 @@ document.getElementById('templateList').addEventListener('click', async (e) => {
   if(btn.dataset.action === 'use'){
     activeTemplateId = id;
     const t = getActiveTemplate();
-    if(t){
-      PAGE_NAME = t.handle;
-      injectPageHashtag(t.handle);
-    }
+    if(t) PAGE_NAME = t.handle;
     renderTemplates();
     render();
     await saveSettings();
-    await saveTemplatesToLocal();
   } else if(btn.dataset.action === 'delete'){
     templates = templates.filter(t => t.id !== id);
     if(activeTemplateId === id){
@@ -720,23 +479,18 @@ document.getElementById('templateList').addEventListener('click', async (e) => {
     renderTemplates();
     render();
     await saveSettings();
-    await saveTemplatesToLocal();
   }
 });
 
 document.getElementById('templateAddBtn').addEventListener('click', async () => {
   const nameInput = document.getElementById('templateNameInput');
   const handleInput = document.getElementById('templateHandleInput');
-  const hashtagsInput = document.getElementById('templateHashtagsInput');
   const colorInput = document.getElementById('templateColorInput');
   const name = nameInput.value.trim();
   const handle = handleInput.value.trim().replace(/^@+/, '');
   const color = colorInput.value || '#4ade80';
-  const hashtags = hashtagsInput.value.trim()
-    ? hashtagsInput.value.split(',').map(h => h.trim().replace(/^#/, '')).filter(Boolean)
-    : [];
   if(!name || !handle) return;
-  const newTemplate = { id: `tpl_${Date.now()}`, name, handle, color, hashtags };
+  const newTemplate = { id: `tpl_${Date.now()}`, name, handle, color };
   templates.push(newTemplate);
   if(!activeTemplateId){
     activeTemplateId = newTemplate.id;
@@ -744,12 +498,10 @@ document.getElementById('templateAddBtn').addEventListener('click', async () => 
   }
   nameInput.value = '';
   handleInput.value = '';
-  hashtagsInput.value = '';
   colorInput.value = '#4ade80';
   renderTemplates();
   render();
   await saveSettings();
-  await saveTemplatesToLocal();
 });
 
 const templatesPanel = document.getElementById('templatesPanel');
@@ -1029,130 +781,6 @@ async function addToHistory(newDrafts){
   }
 }
 
-// Fetches one RSS feed via rss2json and returns its items (or [] on any
-// failure — a single source being blocked/rate-limited shouldn't break the
-// whole tab, the others just show up without it).
-async function fetchRssFeed(sourceName, feedUrl){
-  try{
-    const params = new URLSearchParams({ rss_url: feedUrl, count: '15' });
-    if(rss2jsonApiKey) params.set('api_key', rss2jsonApiKey);
-    const res = await fetch(`https://api.rss2json.com/v1/api.json?${params.toString()}`);
-    const data = await res.json();
-    if(data.status !== 'ok' || !Array.isArray(data.items)) return [];
-    return data.items.map(item => ({
-      title: (item.title || '').trim(),
-      link: item.link || '',
-      source: sourceName,
-      pubDate: item.pubDate || '',
-      thumbnail: item.thumbnail || (item.enclosure && item.enclosure.link) || ''
-    }));
-  }catch(e){
-    console.warn(`RSS fetch failed for ${sourceName}:`, e);
-    return [];
-  }
-}
-
-// Pulls fresh articles from every trusted source that has a known RSS feed
-// (falls back to all of SOURCE_RSS_FEEDS if the user's trusted-sources list
-// is empty), combines them, dedupes by link, sorts newest-first, and caches
-// for RSS_CACHE_MS so switching tabs repeatedly doesn't hammer rss2json's
-// free-tier rate limit.
-async function loadRssNews(force = false){
-  const now = Date.now();
-  if(!force && rssArticles.length && (now - rssLastFetched) < RSS_CACHE_MS) return;
-  rssLoading = true;
-  renderRssNews();
-
-  const candidateNames = sources.length
-    ? sources.filter(s => SOURCE_RSS_FEEDS[s])
-    : Object.keys(SOURCE_RSS_FEEDS);
-
-  const results = await Promise.all(
-    candidateNames.map(name => fetchRssFeed(name, SOURCE_RSS_FEEDS[name]))
-  );
-
-  const seen = new Set();
-  const combined = [];
-  results.flat().forEach(item => {
-    if(!item.link || seen.has(item.link)) return;
-    seen.add(item.link);
-    combined.push(item);
-  });
-  combined.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
-
-  rssArticles = combined;
-  rssLastFetched = now;
-  rssLoading = false;
-  renderRssNews();
-}
-
-function renderRssNews(){
-  const feed = document.getElementById('feed');
-  const knownCount = sources.length
-    ? sources.filter(s => SOURCE_RSS_FEEDS[s]).length
-    : Object.keys(SOURCE_RSS_FEEDS).length;
-
-  if(rssLoading && !rssArticles.length){
-    feed.innerHTML = `<div class="history-empty">📡 Kinukuha ang latest articles mula sa ${knownCount} sources…</div>`;
-    return;
-  }
-  if(!rssArticles.length){
-    feed.innerHTML = `<div class="history-empty">📭 Walang nakuhang articles. Baka rate-limited ang rss2json — subukan ulit mamaya, or magdagdag ng free API key sa RSS settings.<br><br><button class="mini-btn" id="rssRetryBtn">🔄 Subukan ulit</button></div>`;
-    document.getElementById('rssRetryBtn')?.addEventListener('click', () => loadRssNews(true));
-    return;
-  }
-
-  feed.innerHTML = `
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
-      <span style="font-size:12px; color:var(--text-dim);">📡 ${rssArticles.length} articles from ${knownCount} sources · updated ${new Date(rssLastFetched).toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit'})}</span>
-      <button class="mini-btn" id="rssRefreshBtn">🔄 Refresh</button>
-    </div>
-  ` + rssArticles.map((a, i) => `
-    <div class="card" style="margin-bottom:10px;">
-      <div class="card-meta">
-        <span class="source-line">${escapeHtml(a.source)}${a.pubDate ? ` · ${escapeHtml(new Date(a.pubDate).toLocaleString('en-PH', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}))}` : ''}</span>
-      </div>
-      <div class="card-headline" style="margin-top:4px;">
-        <a href="${escapeHtml(a.link)}" target="_blank" rel="noopener" style="color:inherit; text-decoration:none;">${escapeHtml(a.title)}</a>
-      </div>
-      <div class="card-actions" style="margin-top:10px;">
-        <button class="mini-btn use-rss-article" data-index="${i}">✍️ Gamitin bilang source ng draft</button>
-      </div>
-    </div>
-  `).join('');
-
-  document.getElementById('rssRefreshBtn')?.addEventListener('click', () => loadRssNews(true));
-  feed.querySelectorAll('.use-rss-article').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const article = rssArticles[parseInt(btn.dataset.index, 10)];
-      if(!article) return;
-      btn.disabled = true;
-      btn.textContent = 'Gumagawa ng draft…';
-      try{
-        const newDrafts = await runGeneration({ topicFocus: article.link });
-        if(newDrafts.length){
-          drafts = [...newDrafts, ...drafts];
-          await saveDrafts(true);
-          currentFilter = 'all';
-          [...tabs.children].forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
-          render();
-          autoFetchPhotos(newDrafts);
-          setStatus(`Ginawang draft: "${newDrafts[0].headline}"`);
-        } else {
-          setStatus('Hindi nakabuo ng draft para dito — subukan ulit.', true);
-          btn.disabled = false;
-          btn.textContent = '✍️ Gamitin bilang source ng draft';
-        }
-      }catch(err){
-        console.error(err);
-        setStatus('May problema sa paggawa ng draft mula sa article na ito.', true);
-        btn.disabled = false;
-        btn.textContent = '✍️ Gamitin bilang source ng draft';
-      }
-    });
-  });
-}
-
 function renderHistory(){
   const feed = document.getElementById('feed');
   if(!history_sessions.length){
@@ -1205,6 +833,7 @@ function renderHistory(){
         highlight_words: Array.isArray(hd.highlight_words) ? hd.highlight_words : [],
         imageUrl: hd.imageUrl || '',
         imageData: null,
+        photoFitMode: 'cover',
         imagePrompt: null,
         promptCopied: false,
         status: 'draft',
@@ -1284,109 +913,8 @@ function escapeHtml(str){
   return d.innerHTML;
 }
 
-function renderCustomNews(){
-  const handle = (getActiveTemplate() || {}).handle || PAGE_NAME;
-  const enabledStyle = customNewsEnabled
-    ? 'background:var(--trace);color:#05130a;'
-    : 'background:var(--panel-2);color:var(--text-dim);border:1px solid var(--line);';
-  feed.innerHTML = `
-    <!-- ── Generate one specific draft ─────────────────────────── -->
-    <div class="sources-panel" style="margin-top:4px; margin-bottom:14px;">
-      <div class="sources-head" style="cursor:default; padding-bottom:12px; border-bottom:1px solid var(--line); margin-bottom:14px;">
-        <span class="sources-title" style="font-size:13px; color:var(--text);">🎯 Generate a Specific Draft</span>
-      </div>
-      <p style="font-size:12.5px; color:var(--text-dim); margin:0 0 12px;">
-        I-type ang topic o i-paste ang article URL — mag-ge-generate ng isang draft mula doon. Nibo-bypass ang sources list.
-      </p>
-      <div style="display:flex; flex-direction:column; gap:10px;">
-        <textarea id="customDraftInput" placeholder="e.g. 'RTX 5070 Ti restock Philippines' o i-paste ang article link" style="width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:10px; color:var(--text); font-family:'Sora',sans-serif; font-size:13.5px; padding:12px; resize:vertical; min-height:70px; box-sizing:border-box;"></textarea>
-        <button id="customDraftGenBtn" class="btn-primary" style="align-self:flex-start;">
-          <span id="customDraftGenLabel">⚡ Generate this one</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- ── Focus topics filter ─────────────────────────────────── -->
-    <div class="sources-panel">
-      <div class="sources-head" style="cursor:default; padding-bottom:14px; border-bottom:1px solid var(--line); margin-bottom:16px;">
-        <span class="sources-title" style="font-size:13px; color:var(--text);">⚙️ Auto-Feed Focus Topics</span>
-        <button id="customNewsToggle" style="border-radius:8px; padding:7px 14px; font-size:12.5px; font-family:'Sora',sans-serif; font-weight:600; border:none; cursor:pointer; ${enabledStyle}">
-          ${customNewsEnabled ? '✓ Enabled' : 'Disabled'}
-        </button>
-      </div>
-      <p style="font-size:12.5px; color:var(--text-dim); margin:0 0 14px;">
-        Kapag naka-enable, ia-add ang mga topics na ito sa AI prompt para mas focused ang auto-feed. Pwedeng keywords, brands, o product lines (hal. <em>RTX 5090, DDR5, budget builds</em>).
-      </p>
-      <div class="source-list" id="customTopicList">
-        ${customNewsTopics.length === 0
-          ? `<span style="color:var(--text-dim);font-size:12.5px;">Wala pang topics — magdagdag sa ibaba.</span>`
-          : customNewsTopics.map((t,i) => `
-              <span class="source-chip">${escapeHtml(t)}<button data-ci="${i}" title="Remove">&times;</button></span>
-            `).join('')}
-      </div>
-      <div class="source-add" style="margin-top:12px;">
-        <input type="text" id="customTopicInput" placeholder="Add a topic, keyword, or brand…" style="flex:1; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:'Sora',sans-serif; font-size:13.5px; padding:10px 12px;">
-        <button id="customTopicAddBtn" style="background:var(--trace-dim);color:#eafff2;padding:10px 14px;border-radius:8px;font-size:13px;border:none;cursor:pointer;font-family:'Sora',sans-serif;">Add</button>
-      </div>
-      <p class="source-hint" style="margin-top:12px;">Active page: <strong style="color:var(--trace);">@${escapeHtml(handle)}</strong> — hashtag auto-injects as <strong style="color:var(--copper);">#${escapeHtml(handle.replace(/^@/,'').toLowerCase())}</strong> when you switch pages.</p>
-    </div>
-  `;
-
-  // — Generate specific draft handler —
-  document.getElementById('customDraftGenBtn').addEventListener('click', async () => {
-    const topic = document.getElementById('customDraftInput').value.trim();
-    if(!topic){ setStatus('Type a topic or paste an article URL first.', true); return; }
-    const btn = document.getElementById('customDraftGenBtn');
-    const lbl = document.getElementById('customDraftGenLabel');
-    btn.disabled = true;
-    lbl.innerHTML = '<span class="spinner"></span> Searching…';
-    setStatus('Fetching that story…');
-    try{
-      const newDrafts = await runGeneration({ topicFocus: topic, maxItems: '1' });
-      drafts = [...newDrafts, ...drafts];
-      await saveSettings();
-      document.getElementById('customDraftInput').value = '';
-      setStatus('Draft added — check the All tab.');
-    }catch(err){
-      console.error(err);
-      setStatus(`Could not generate that draft: ${err.message || 'unknown error'}`, true);
-    }finally{
-      btn.disabled = false;
-      lbl.textContent = '⚡ Generate this one';
-    }
-  });
-
-  // — Focus topics handlers —
-  document.getElementById('customNewsToggle').addEventListener('click', async () => {
-    customNewsEnabled = !customNewsEnabled;
-    await saveCustomNewsToLocal();
-    renderCustomNews();
-  });
-  document.getElementById('customTopicList').addEventListener('click', async (e) => {
-    const btn = e.target.closest('button[data-ci]');
-    if(!btn) return;
-    customNewsTopics.splice(parseInt(btn.dataset.ci), 1);
-    await saveCustomNewsToLocal();
-    renderCustomNews();
-  });
-  const addTopic = async () => {
-    const inp = document.getElementById('customTopicInput');
-    const val = inp.value.trim();
-    if(!val) return;
-    if(!customNewsTopics.some(t => t.toLowerCase() === val.toLowerCase())) customNewsTopics.push(val);
-    inp.value = '';
-    await saveCustomNewsToLocal();
-    renderCustomNews();
-  };
-  document.getElementById('customTopicAddBtn').addEventListener('click', addTopic);
-  document.getElementById('customTopicInput').addEventListener('keydown', (e) => { if(e.key==='Enter'){ e.preventDefault(); addTopic(); } });
-}
-
 function render(){
-  if(currentFilter === 'custom-news'){ renderCustomNews(); return; }
-  const list = currentFilter === 'all' ? drafts
-    : currentFilter === 'games' ? drafts.filter(d => d.category === 'Games')
-    : drafts.filter(d => d.status === currentFilter);
+  const list = currentFilter === 'all' ? drafts : drafts.filter(d => d.status === currentFilter);
 
   if(list.length === 0){
     feed.innerHTML = `
@@ -1413,70 +941,66 @@ function render(){
           </div>
         </div>
         <h3 class="headline">${escapeHtml(d.headline)}</h3>
-        <p class="source-line">${escapeHtml(d.source || '')}${d.url ? ` · <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">source ↗</a>` : ''}${d.publishedDate ? ` · <span style="display:inline-flex;align-items:center;gap:3px;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-size:11px;color:var(--text-dim);font-family:'IBM Plex Mono',monospace;">📅 ${escapeHtml(d.publishedDate)}</span>` : '<span style="display:inline-flex;align-items:center;gap:3px;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-size:11px;color:#666;font-family:\'IBM Plex Mono\',monospace;opacity:0.5;">📅 date unknown</span>'}</p>
+        <p class="source-line">${escapeHtml(d.source || '')}${d.url ? ` · <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">source ↗</a>` : ''}</p>
+        <span class="graphic-label" style="margin-top:10px;">Caption for graphic (text on image)</span>
+        <textarea data-id="${d.id}" class="graphic-caption-input" style="margin-bottom:12px;">${escapeHtml(d.graphicCaption != null ? d.graphicCaption : d.caption)}</textarea>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
+          <label style="font-size:12px; color:var(--text-dim); white-space:nowrap;">Font
+            <select data-id="${d.id}" class="graphic-font-select" style="margin-left:6px; background:var(--panel-2); border:1px solid var(--line); border-radius:7px; color:var(--text); font-size:13px; padding:6px 8px;">
+              ${FONT_OPTIONS.map(f => `<option value="${f.value}" ${(d.fontFamily || FONT_OPTIONS[0].value) === f.value ? 'selected' : ''}>${f.label}</option>`).join('')}
+            </select>
+          </label>
+          <label style="font-size:12px; color:var(--text-dim); white-space:nowrap;">Size
+            <input type="number" data-id="${d.id}" class="graphic-font-size" min="18" max="90" placeholder="Auto" value="${d.fontSizeOverride || ''}" style="width:64px; margin-left:6px; background:var(--panel-2); border:1px solid var(--line); border-radius:7px; color:var(--text); font-size:13px; padding:6px 8px;">
+          </label>
+          ${d.fontSizeOverride ? `<button class="mini-btn" data-action="reset-font-size" data-id="${d.id}" style="font-size:12px;">Reset to auto</button>` : ''}
+        </div>
         <span class="graphic-label">Caption for Facebook post/feed</span>
         <textarea data-id="${d.id}" class="caption-input">${escapeHtml(d.caption)}</textarea>
         <div class="graphic-block">
           <span class="graphic-label">Post graphic</span>
+          ${graphicStyle === 'overlay' ? `
+          <span class="graphic-label" style="margin-top:0;">Category tag (shown on the photo)</span>
+          <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+            <input type="text" data-id="${d.id}" class="category-label-input" value="${escapeHtml(d.categoryLabel || d.category || '')}" maxlength="24" style="flex:1; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:'Sora',sans-serif; font-size:13px; padding:9px 11px;">
+            <input type="color" data-id="${d.id}" class="tag-color-input" value="${d.tagColor || getCategoryStyle(d.category).color}" title="Tag pill color" style="width:38px; height:38px; padding:2px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; cursor:pointer;">
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap; margin:-6px 0 12px;">
+            ${TAG_COLOR_PRESETS.map(p => `<button type="button" class="mini-btn tag-color-preset" data-action="tag-color-preset" data-id="${d.id}" data-color="${p.color}" data-label="${p.label}" style="font-size:11px; padding:4px 9px; display:flex; align-items:center; gap:5px;"><span style="width:9px; height:9px; border-radius:50%; background:${p.color}; display:inline-block;"></span>${p.label}</button>`).join('')}
+          </div>
+          ` : ''}
           <div class="graphic-canvas-wrap" id="canvasWrap-${d.id}">
             <canvas id="canvas-${d.id}" width="1080" height="1080"></canvas>
           </div>
+          ${d.imageData ? `
+          <div class="graphic-controls" style="margin-bottom:10px;">
+            <button class="mini-btn fitmode" data-action="toggle-fit" data-id="${d.id}" title="Switch between cropping the photo to fill the frame vs. showing the whole photo uncropped (with a blurred fill background)">${d.photoFitMode === 'contain' ? '🔲 Showing whole photo (no crop)' : '⬜ Fill frame (crop) — tap to show whole photo'}</button>
+          </div>
+          <div class="image-position-controls" style="${d.photoFitMode === 'contain' ? 'opacity:0.4; pointer-events:none;' : ''}">
+            <div class="image-position-row">
+              <label>↔ Horizontal</label>
+              <input type="range" min="0" max="100" value="${Math.round((d.imageOffsetX != null ? d.imageOffsetX : 0.5) * 100)}" class="image-offset-x" data-id="${d.id}" ${d.photoFitMode === 'contain' ? 'disabled' : ''}>
+            </div>
+            <div class="image-position-row">
+              <label>↕ Vertical</label>
+              <input type="range" min="0" max="100" value="${Math.round((d.imageOffsetY != null ? d.imageOffsetY : 0.5) * 100)}" class="image-offset-y" data-id="${d.id}" ${d.photoFitMode === 'contain' ? 'disabled' : ''}>
+            </div>
+          </div>
+          ` : ''}
           <div class="graphic-controls">
             <label class="file-btn">📷 ${d.imageData ? 'Replace with real photo' : 'Use a real photo instead'}
               <input type="file" accept="image/*" class="photo-input" data-id="${d.id}">
             </label>
             ${(!d.imageData && d.imageUrl) ? `<button class="mini-btn fetch-photo" data-action="fetch-photo" data-id="${d.id}">🔗 Try fetch from article</button>` : ''}
+            <button class="mini-btn genprompt" data-action="gen-prompt" data-id="${d.id}">${d.generatingPrompt ? '<span class="spinner spinner-dark"></span> Generating…' : (d.imagePrompt ? '🎨 Regenerate image prompt' : '🎨 Generate image prompt (ChatGPT)')}</button>
             <button class="mini-btn download" data-action="download" data-id="${d.id}">Download PNG</button>
           </div>
-          <details class="graphic-customize">
-            <summary>🎨 Customize graphic</summary>
-            <div class="graphic-customize-inner">
-              <span class="graphic-label" style="margin-top:0;">Caption for graphic (text on image)</span>
-              <textarea data-id="${d.id}" class="graphic-caption-input" style="margin-bottom:12px;">${escapeHtml(d.graphicCaption != null ? d.graphicCaption : d.caption)}</textarea>
-              <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
-                <label style="font-size:12px; color:var(--text-dim); white-space:nowrap;">Font
-                  <select data-id="${d.id}" class="graphic-font-select" style="margin-left:6px; background:var(--panel-2); border:1px solid var(--line); border-radius:7px; color:var(--text); font-size:13px; padding:6px 8px;">
-                    ${FONT_OPTIONS.map(f => `<option value="${f.value}" ${(d.fontFamily || FONT_OPTIONS[0].value) === f.value ? 'selected' : ''}>${f.label}</option>`).join('')}
-                  </select>
-                </label>
-                <label style="font-size:12px; color:var(--text-dim); white-space:nowrap;">Size
-                  <input type="number" data-id="${d.id}" class="graphic-font-size" min="18" max="90" placeholder="Auto" value="${d.fontSizeOverride || ''}" style="width:64px; margin-left:6px; background:var(--panel-2); border:1px solid var(--line); border-radius:7px; color:var(--text); font-size:13px; padding:6px 8px;">
-                </label>
-                ${d.fontSizeOverride ? `<button class="mini-btn" data-action="reset-font-size" data-id="${d.id}" style="font-size:12px;">Reset to auto</button>` : ''}
-              </div>
-              ${graphicStyle === 'overlay' ? `
-              <span class="graphic-label" style="margin-top:0;">Category tag (shown on the photo)</span>
-              <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
-                <input type="text" data-id="${d.id}" class="category-label-input" value="${escapeHtml(d.categoryLabel || d.category || '')}" maxlength="24" style="flex:1; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:'Sora',sans-serif; font-size:13px; padding:9px 11px;">
-                <input type="color" data-id="${d.id}" class="tag-color-input" value="${d.tagColor || getCategoryStyle(d.category).color}" title="Tag pill color" style="width:38px; height:38px; padding:2px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; cursor:pointer;">
-              </div>
-              <div style="display:flex; gap:6px; flex-wrap:wrap; margin:-6px 0 14px;">
-                ${TAG_COLOR_PRESETS.map(p => `<button type="button" class="mini-btn tag-color-preset" data-action="tag-color-preset" data-id="${d.id}" data-color="${p.color}" data-label="${p.label}" style="font-size:11px; padding:4px 9px; display:flex; align-items:center; gap:5px;"><span style="width:9px; height:9px; border-radius:50%; background:${p.color}; display:inline-block;"></span>${p.label}</button>`).join('')}
-              </div>
-              ` : ''}
-              ${d.imageData ? `
-              <div class="image-position-controls">
-                <div class="image-position-row">
-                  <label>↔ Horizontal</label>
-                  <input type="range" min="0" max="100" value="${Math.round((d.imageOffsetX != null ? d.imageOffsetX : 0.5) * 100)}" class="image-offset-x" data-id="${d.id}">
-                </div>
-                <div class="image-position-row">
-                  <label>↕ Vertical</label>
-                  <input type="range" min="0" max="100" value="${Math.round((d.imageOffsetY != null ? d.imageOffsetY : 0.5) * 100)}" class="image-offset-y" data-id="${d.id}">
-                </div>
-              </div>
-              ` : ''}
-              <div class="graphic-controls" style="margin-top:4px;">
-                <button class="mini-btn genprompt" data-action="gen-prompt" data-id="${d.id}">${d.generatingPrompt ? '<span class="spinner spinner-dark"></span> Generating…' : (d.imagePrompt ? '🎨 Regenerate image prompt' : '🎨 Generate image prompt (ChatGPT)')}</button>
-              </div>
-              ${d.imagePrompt ? `
-              <div class="prompt-box">
-                <span class="graphic-label">AI image prompt (paste into ChatGPT / DALL·E image generator)</span>
-                <textarea class="prompt-output" readonly rows="4">${escapeHtml(d.imagePrompt)}</textarea>
-                <button class="mini-btn copy-prompt ${d.promptCopied ? 'copied' : ''}" data-action="copy-prompt" data-id="${d.id}">${d.promptCopied ? 'Copied ✓' : '📋 Copy prompt'}</button>
-              </div>` : ''}
-            </div>
-          </details>
+          ${d.imagePrompt ? `
+          <div class="prompt-box">
+            <span class="graphic-label">AI image prompt (paste into ChatGPT / DALL·E image generator)</span>
+            <textarea class="prompt-output" readonly rows="4">${escapeHtml(d.imagePrompt)}</textarea>
+            <button class="mini-btn copy-prompt ${d.promptCopied ? 'copied' : ''}" data-action="copy-prompt" data-id="${d.id}">${d.promptCopied ? 'Copied ✓' : '📋 Copy prompt'}</button>
+          </div>` : ''}
         </div>
         <div class="card-actions">
           <button class="mini-btn copy" data-action="copy" data-id="${d.id}">Copy feed caption</button>
@@ -1561,6 +1085,10 @@ feed.addEventListener('click', async (e) => {
     d.tagColor = btn.dataset.color;
     saveDrafts();
     render(); // full render so the text input + color swatch reflect the preset
+  } else if(action === 'toggle-fit'){
+    d.photoFitMode = d.photoFitMode === 'contain' ? 'cover' : 'contain';
+    saveDrafts();
+    render(); // full render so the pan sliders enable/disable to match
   } else if(action === 'reset-font-size'){
     d.fontSizeOverride = null;
     saveDrafts();
@@ -1603,6 +1131,7 @@ feed.addEventListener('click', async (e) => {
       d.imageData = dataUrl;
       d.imageOffsetX = 0.5;
       d.imageOffsetY = 0.5;
+      d.photoFitMode = 'cover';
       await saveDrafts(true);
       render();
       setStatus('');
@@ -1668,6 +1197,7 @@ feed.addEventListener('change', async (e) => {
       d.imageData = dataUrl;
       d.imageOffsetX = 0.5;
       d.imageOffsetY = 0.5;
+      d.photoFitMode = 'cover';
       await saveDrafts(true);
       render();
       setStatus('');
@@ -2084,6 +1614,62 @@ function computeContentCropRect(img){
   }
 }
 
+// Draws a photo into a (0,0,areaW,areaH) region of ctx, in one of two modes:
+//
+// - 'cover' (default): cropped to fill the area completely, panned via the
+//   imageOffsetX/Y sliders (existing behavior, unchanged).
+// - 'contain': nothing gets cropped — a blurred, zoomed-in copy of the same
+//   photo fills the background (no empty bars), and the full photo is drawn
+//   on top at the largest size that still fits entirely within the area.
+//   Meant for product shots (e.g. a wide GPU photo, or a photo with a lot of
+//   dead space around the subject) where the panned/cropped area math still
+//   can't avoid cutting off something you want visible — this guarantees
+//   nothing gets cut off, at the cost of some padding around the photo.
+function drawPhotoFitted(ctx, d, photoImg, areaW, areaH){
+  if(d.photoFitMode === 'contain'){
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, areaW, areaH);
+    ctx.clip();
+
+    ctx.filter = 'blur(40px)';
+    const bgScale = Math.max(areaW / photoImg.width, areaH / photoImg.height) * 1.15;
+    const bgW = photoImg.width * bgScale, bgH = photoImg.height * bgScale;
+    ctx.drawImage(photoImg, (areaW - bgW) / 2, (areaH - bgH) / 2, bgW, bgH);
+    ctx.filter = 'none';
+
+    // Dark scrim so the blurred backdrop doesn't fight the text/strip
+    ctx.fillStyle = 'rgba(10,15,13,0.45)';
+    ctx.fillRect(0, 0, areaW, areaH);
+
+    const scale = Math.min(areaW / photoImg.width, areaH / photoImg.height) * 0.92;
+    const iw = photoImg.width * scale, ih = photoImg.height * scale;
+    const ix = (areaW - iw) / 2, iy = (areaH - ih) / 2;
+    ctx.drawImage(photoImg, ix, iy, iw, ih);
+    ctx.restore();
+    return;
+  }
+
+  // ── 'cover' (default) — cropped to fill, adjustable pan position ──
+  if(d._cropRectFor !== d.imageData){
+    d._cropRect = computeContentCropRect(photoImg);
+    d._cropRectFor = d.imageData;
+  }
+  const crop = d._cropRect;
+  const OVERSCAN = 1.15;
+  const scale = Math.max(areaW / crop.sw, areaH / crop.sh) * OVERSCAN;
+  const iw = crop.sw * scale, ih = crop.sh * scale;
+  const offsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
+  const offsetY = d.imageOffsetY != null ? d.imageOffsetY : 0.5;
+  const ix = (areaW - iw) * offsetX, iy = (areaH - ih) * offsetY;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, areaW, areaH);
+  ctx.clip();
+  ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, ix, iy, iw, ih);
+  ctx.restore();
+}
+
 // Auto-fits the headline into a given box by shrinking the font size (in 1px
 // steps) until the wrapped text's line count AND total block height both fit
 // — instead of a fixed font size that overflows on long headlines or looks
@@ -2291,28 +1877,7 @@ function drawGraphicBand(d){
         ctx.fillRect(0, 0, W, H);
 
         if(photoImg){
-          // ── Draw real photo (top, cover-fit, adjustable crop position) ─
-          // A small overscan (beyond the strict minimum cover-fit scale) is
-          // applied so BOTH sliders always have real pan range — without it,
-          // a landscape photo leaves zero vertical slack (and a portrait
-          // photo leaves zero horizontal slack), making one slider a no-op.
-          if(d._cropRectFor !== d.imageData){
-            d._cropRect = computeContentCropRect(photoImg);
-            d._cropRectFor = d.imageData;
-          }
-          const crop = d._cropRect;
-          const OVERSCAN = 1.15;
-          const scale = Math.max(W / crop.sw, imgAreaH / crop.sh) * OVERSCAN;
-          const iw = crop.sw * scale, ih = crop.sh * scale;
-          const offsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
-          const offsetY = d.imageOffsetY != null ? d.imageOffsetY : 0.5;
-          const ix = (W - iw) * offsetX, iy = (imgAreaH - ih) * offsetY;
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(0, 0, W, imgAreaH);
-          ctx.clip();
-          ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, ix, iy, iw, ih);
-          ctx.restore();
+          drawPhotoFitted(ctx, d, photoImg, W, imgAreaH);
         } else {
           // ── No photo available — auto category background ───
           drawCategoryBackground(ctx, W, imgAreaH, d.category);
@@ -2410,20 +1975,7 @@ function drawGraphicOverlay(d){
 
         // ── Photo fills the ENTIRE canvas (cover-fit, adjustable crop) ──
         if(photoImg){
-          // Overscan so both sliders always have real pan range (see note
-          // in the Band style renderer above for why this is needed).
-          if(d._cropRectFor !== d.imageData){
-            d._cropRect = computeContentCropRect(photoImg);
-            d._cropRectFor = d.imageData;
-          }
-          const crop = d._cropRect;
-          const OVERSCAN = 1.15;
-          const scale = Math.max(W / crop.sw, H / crop.sh) * OVERSCAN;
-          const iw = crop.sw * scale, ih = crop.sh * scale;
-          const offsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
-          const offsetY = d.imageOffsetY != null ? d.imageOffsetY : 0.5;
-          const ix = (W - iw) * offsetX, iy = (H - ih) * offsetY;
-          ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, ix, iy, iw, ih);
+          drawPhotoFitted(ctx, d, photoImg, W, H);
         } else {
           drawCategoryBackground(ctx, W, H, d.category);
         }
@@ -2520,8 +2072,6 @@ tabs.addEventListener('click', async (e) => {
   [...tabs.children].forEach(b => b.classList.toggle('active', b === btn));
   if(currentFilter === 'history'){
     renderHistory();
-  } else if(currentFilter === 'rss-news'){
-    loadRssNews(); // cached — only re-fetches if stale or forced via Refresh button
   } else {
     render();
   }
@@ -2531,13 +2081,6 @@ tabs.addEventListener('click', async (e) => {
 // whether it's a broad search or a single-source scoped search.
 function buildCaptionInstructions(usdToPhpRate, graphicStyleParam){
   const isOverlay = graphicStyleParam === 'overlay';
-  const now = new Date();
-  const todayStr = now.toDateString();
-  const monthStr = now.toLocaleString('en-US', { month: 'long', year: 'numeric' }); // e.g. "July 2026"
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toDateString();
-  const recencyRule = `
-⚠️ RECENCY RULE — CRITICAL: Today is ${todayStr}. Only include articles published between ${monthStart} and today (within ${monthStr}). Any article published before ${monthStart} must be SKIPPED — do not include it regardless of how relevant or well-ranked it is. Always check and confirm the publish date of every article before including it. If the publish date cannot be confirmed to be within ${monthStr}, exclude it.
-`;
 
   const graphicSpec = isOverlay ? `
 "caption_graphic" — the headline-style text rendered directly OVER the photo (left-aligned, bold, sitting on a dark gradient scrim for legibility) — think a sharp tech-news headline overlaid on the image itself, e.g. "VALVE ENGINEER EXPLAINS WHY COMPANY WON'T MAKE STEAM MACHINE EXCLUSIVES, SAYS RESTRICTING WHERE PEOPLE CAN PLAY 'ISN'T A GREAT MODEL'":
@@ -2565,8 +2108,7 @@ Examples of the tone to hit for caption_graphic specifically:
 - "A cooler that's basically a jet engine strapped to your CPU. Bold choice."
 `;
 
-  return `${recencyRule}
-For each news item, write TWO captions in the same voice — one short for the image graphic, one longer and more detailed for the actual Facebook feed post:
+  return `For each news item, write TWO captions in the same voice — one short for the image graphic, one longer and more detailed for the actual Facebook feed post:
 
 Both should be:
 - INTELLECTUALLY SHARP — show real understanding of WHY this matters. Connect the dots. Reference context (architecture generations, market positioning, historical comparisons, what this means for builders or buyers). Sound like someone who has built hundreds of PCs and read every spec sheet.
@@ -2598,72 +2140,15 @@ CRITICAL — "url" FIELD RULES:
 - If you cannot find that specific article's direct URL, set "url" to an empty string ("") rather than falling back to the homepage or guessing.
 
 Respond with ONLY a raw JSON array (no markdown fences, no commentary) where each item has exactly these fields:
-[
-  {
-    "headline": "the news headline",
-    "source": "publication name",
-    "url": "the exact direct article URL, or empty string if unknown — never the homepage",
-    "image_url": "direct URL to the article's main/hero image if you can identify one, otherwise empty string",
-    "category": "GPU|CPU|Storage|Motherboard|Peripherals|Cooling|PSU|Games|General",
-    "published_date": "REQUIRED — the date this article was published by the source, in YYYY-MM-DD format (e.g. 2026-07-22). This must be the actual source publish date, not today's date. If you truly cannot determine it, use empty string — but always try to find it from the article metadata or search result snippet.",
-    "caption_graphic": "the short caption for the image graphic",
-    "caption_feed": "the longer, more detailed caption for the Facebook feed post",
-    "highlight_words": ["1-3 key words or short product names from the headline to visually emphasize"]
-  }
-]`;
+[{"headline": "...", "source": "publication name", "url": "the exact direct article URL, or empty string if unknown — never the homepage", "image_url": "direct URL to the article's main/hero image if you can identify one, otherwise empty string", "category": "GPU|CPU|Storage|Motherboard|Peripherals|Cooling|PSU|General", "caption_graphic": "the short caption for the image graphic", "caption_feed": "the longer, more detailed caption for the Facebook feed post", "highlight_words": ["1-3 key words or short product names from the headline to visually emphasize, e.g. product names, brand names, or standout numbers"]}]`;
 }
 
 function buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyleParam){
-  const topicFocus = (customNewsEnabled && customNewsTopics.length > 0)
-    ? `\nFOCUS TOPICS — Prioritize stories related to any of these (but don't exclude other strong stories): ${customNewsTopics.join(', ')}.\n`
-    : '';
-  const tpl = getActiveTemplate();
-  const pageHashtags = (tpl && tpl.hashtags && tpl.hashtags.length > 0)
-    ? tpl.hashtags.map(h => '#' + h).join(' ')
-    : '';
-  const hashtagInstruction = pageHashtags
-    ? `\nPAGE HASHTAGS — Every caption_feed MUST include these exact tags at the end: ${pageHashtags}. You may add 1-2 more relevant ones on top for 3-5 total.\n`
-    : '';
-  return `You are the voice behind "${PAGE_NAME}" — a Filipino tech page run by someone who knows hardware inside-out AND stays on top of gaming: a builder, a repair tech, a gamer, and a sharp observer of the industry. You write Facebook captions that sound like they came from the smartest, wittiest person in the room — someone who can talk GPU thermals one moment and a game's major update the next.
+  return `You are the voice behind "${PAGE_NAME}" — a Filipino tech page run by someone who actually knows hardware inside-out: a builder, a repair tech, and a sharp observer of the industry. You write Facebook captions that sound like they came from the smartest, wittiest person in the room who also happens to explain things better than most tech journalists.
 
 ${scopeConstraint}
-${topicFocus}${hashtagInstruction}
-${buildCaptionInstructions(usdToPhpRate, graphicStyleParam)}`;
-}
 
-// Lightweight wrapper used by the Custom News "Generate this one" button.
-// PHOTO_OVERLAY routes through a proxy (fetchNewsBatch) unlike CUSTOM_NEWS
-// which calls the API directly, so we build the prompt here and call that.
-async function runGeneration({ topicFocus = null, maxItems = '1' } = {}){
-  const usdToPhpRate = parseFloat(document.getElementById('usdPhpRateInput')?.value) || 58;
-  const graphicStyle = document.querySelector('input[name="graphicStyle"]:checked')?.value || 'graphic';
-  const scopeConstraint = topicFocus
-    ? `Focus specifically on this topic or article, and nothing else: "${topicFocus}". If it's a URL, find and use that specific article. Return exactly 1 item.`
-    : (sources.length > 0
-        ? `Only use these sources: ${sources.join(', ')}.`
-        : `Search broadly across reputable tech hardware outlets.`);
-  const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyle);
-  const userPrompt = topicFocus
-    ? `Find and write a draft for: ${topicFocus}`
-    : `Find today's PC hardware/component news and write ${maxItems} caption drafts as specified.`;
-  const items = await fetchNewsBatch(systemPrompt, userPrompt);
-  const now = Date.now();
-  return items.map((it, i) => ({
-    id: `d_${now}_${i}`,
-    headline: it.headline || 'Untitled',
-    source: it.source || '',
-    url: it.url || '',
-    category: it.category || 'General',
-    caption: it.caption_feed || it.caption || '',
-    captionGraphic: it.caption_graphic || it.caption || '',
-    highlight_words: Array.isArray(it.highlight_words) ? it.highlight_words : [],
-    imageUrl: it.image_url || '',
-    imageData: null,
-    status: 'draft',
-    createdAt: now,
-    publishedDate: it.published_date || '',
-    origin: topicFocus ? 'custom' : 'auto'
-  }));
+${buildCaptionInstructions(usdToPhpRate, graphicStyleParam)}`;
 }
 
 function sleep(ms){ return new Promise(res => setTimeout(res, ms)); }
@@ -2776,8 +2261,8 @@ async function generateDrafts(){
             const rangeText = `from ${chunk.start.toDateString()} through ${chunk.end.toDateString()}`;
             genLabel.innerHTML = `<span class="spinner"></span> ${source} — week ${wi + 1}/${weekChunks.length} (source ${si + 1}/${sources.length})`;
             setStatus(`Searching ${source}, ${rangeText}… (call ${callIndex}/${totalCalls})`);
-            const scopeConstraint = `Only use this one source: ${source}. Do not use any other outlet. Find ALL relevant PC hardware/component news AND notable game updates/releases this specific outlet published ${rangeText}. Only include articles confirmed to be published within this date range — skip any article published before the start of the current month. Return EVERY qualifying story published in that exact window — completeness matters more than picking just the "best" one.`;
-            const userPrompt = `Find every PC hardware/component AND gaming news article "${source}" published ${rangeText}, and write the Facebook caption drafts as specified for each one. Include hardware news AND any notable game updates, patches, or releases covered by this source. Skip any article not published within ${rangeText}.`;
+            const scopeConstraint = `Only use this one source: ${source}. Do not use any other outlet. Find ALL relevant PC hardware/component news articles this specific outlet published ${rangeText}. Return EVERY qualifying story published in that exact window, even if there are several — this is a narrow one-week slice, so completeness matters more than picking just the "best" one.`;
+            const userPrompt = `Find every PC hardware/component news article "${source}" published ${rangeText}, and write the Facebook caption drafts as specified for each one.`;
             const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyle);
             try{
               const sourceItems = await fetchNewsBatch(systemPrompt, userPrompt);
@@ -2798,8 +2283,8 @@ async function generateDrafts(){
           const rangeText = `from ${chunk.start.toDateString()} through ${chunk.end.toDateString()}`;
           genLabel.innerHTML = `<span class="spinner"></span> Searching week ${wi + 1}/${weekChunks.length}…`;
           setStatus(`Searching hardware news, ${rangeText}… (week ${wi + 1}/${weekChunks.length})`);
-          const scopeConstraint = `Search broadly across reputable tech hardware outlets AND gaming news sites. Find ALL relevant PC hardware/component news AND notable game updates/releases published ${rangeText}. Only include articles confirmed published within this range — skip anything older. Return every qualifying story from that window, not just the top one or two.`;
-          const userPrompt = `Find PC hardware/component AND gaming news published ${rangeText} and write the Facebook caption drafts as specified. Include a mix: mostly hardware news, with 1-2 notable game updates or releases per batch. Skip any article not published within ${rangeText}. Return every distinct qualifying article from that window.`;
+          const scopeConstraint = `Search broadly across reputable tech hardware outlets. Find ALL relevant PC hardware/component news articles published ${rangeText}. Return every qualifying story from that window, not just the top one or two.`;
+          const userPrompt = `Find PC hardware/component news published ${rangeText} and write the Facebook caption drafts as specified. Return every distinct qualifying article from that window.`;
           const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyle);
           try{
             const weekItems = await fetchNewsBatch(systemPrompt, userPrompt);
@@ -2811,15 +2296,13 @@ async function generateDrafts(){
         }
       }
     } else {
-      // Monthly mode — fetch best stories published this calendar month.
-      const monthLabel = today.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toDateString();
-      const dateRangeText = `within ${monthLabel} (${monthStart} to ${today.toDateString()})`;
-      setStatus(`Fetching ${monthLabel} PC hardware + gaming news…`);
+      // Quick "today" mode — one combined call, fast, for daily checks.
+      setStatus(`Fetching today's PC hardware/component news…`);
+      const dateRangeText = `today, ${today.toDateString()}`;
       const scopeConstraint = sources.length > 0
-        ? `Only use these sources: ${sources.join(', ')}. Find PC hardware/component news AND notable game updates/releases published ${dateRangeText}. Skip anything published before ${monthStart}.`
-        : `Search broadly across reputable tech hardware outlets AND gaming news sites (IGN, Kotaku, PC Gamer, GameSpot, Polygon, or similar). Find PC hardware/component news AND notable game updates/releases/announcements published ${dateRangeText}. Skip anything published before ${monthStart}.`;
-      const userPrompt = `Find this month's tech and gaming news and write the Facebook caption drafts as specified. Today is ${today.toDateString()}. Only include articles published ${dateRangeText}. Return a MIX: 4-5 items about PC hardware/components, and 1-2 items about notable game updates, patches, releases, or announcements (any platform: PC, console, or mobile). Total: 5-7 items.`;
+        ? `Only use these sources — search site-by-site if needed, and skip any story you can't attribute to one of them: ${sources.join(', ')}. Do not use any other outlet. Find PC hardware/component news published ${dateRangeText}.`
+        : `Search broadly across reputable tech hardware outlets. Find PC hardware/component news published ${dateRangeText}.`;
+      const userPrompt = `Find today's PC hardware/component news and write the Facebook caption drafts as specified. Today's date is ${today.toDateString()}.`;
       const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyle);
       items = await fetchNewsBatch(systemPrompt, userPrompt);
     }
@@ -2913,12 +2396,12 @@ const newDrafts = freshItems.map((it, i) => {
         source: it.source || '',
         url,
         category: it.category || 'General',
-        publishedDate: it.published_date || '',
         caption: captionWithSource,
         graphicCaption: graphicCap,
         highlight_words: Array.isArray(it.highlight_words) ? it.highlight_words : [],
         imageUrl: it.image_url || '',
         imageData: null,
+        photoFitMode: 'cover',
         imagePrompt: null,
         promptCopied: false,
         status: 'draft',
@@ -2953,21 +2436,12 @@ const newDrafts = freshItems.map((it, i) => {
 genBtn.addEventListener('click', generateDrafts);
 
 (async () => {
-  // Load templates + custom news from local storage first for instant UI
-  await loadTemplatesFromLocal();
-  await loadCustomNewsFromLocal();
-  await loadRssSettingsFromLocal();
-  if(rss2jsonKeyInput && rss2jsonApiKey) rss2jsonKeyInput.value = rss2jsonApiKey;
-  if(templates.length) renderTemplates();
-
   setStatus('Loading your drafts and settings from Google Sheet…');
   await loadAllFromSheet();
   renderTemplates();
   renderSources();
   render();
   setStatus('');
-  // Persist whatever the sheet loaded
-  await saveTemplatesToLocal();
 })();
 </script>
 
