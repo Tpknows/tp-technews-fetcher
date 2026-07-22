@@ -1138,7 +1138,7 @@ function render(){
           </div>
         </div>
         <h3 class="headline">${escapeHtml(d.headline)}</h3>
-        <p class="source-line">${escapeHtml(d.source || '')}${d.url ? ` · <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">source ↗</a>` : ''}${d.publishedDate ? ` · <span style="color:var(--text-dim);font-size:11.5px;">📅 ${escapeHtml(d.publishedDate)}</span>` : ''}</p>
+        <p class="source-line">${escapeHtml(d.source || '')}${d.url ? ` · <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">source ↗</a>` : ''}${d.publishedDate ? ` · <span style="display:inline-flex;align-items:center;gap:3px;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-size:11px;color:var(--text-dim);font-family:'IBM Plex Mono',monospace;">📅 ${escapeHtml(d.publishedDate)}</span>` : '<span style="display:inline-flex;align-items:center;gap:3px;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-size:11px;color:#666;font-family:\'IBM Plex Mono\',monospace;opacity:0.5;">📅 date unknown</span>'}</p>
         <span class="graphic-label" style="margin-top:10px;">Caption for graphic (text on image)</span>
         <textarea data-id="${d.id}" class="graphic-caption-input" style="margin-bottom:12px;">${escapeHtml(d.graphicCaption != null ? d.graphicCaption : d.caption)}</textarea>
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
@@ -2314,8 +2314,19 @@ CRITICAL — "url" FIELD RULES:
 - If you cannot find that specific article's direct URL, set "url" to an empty string ("") rather than falling back to the homepage or guessing.
 
 Respond with ONLY a raw JSON array (no markdown fences, no commentary) where each item has exactly these fields:
-[{"headline": "...", "source": "publication name", "url": "the exact direct article URL, or empty string if unknown — never the homepage", "image_url": "direct URL to the article's main/hero image if you can identify one, otherwise empty string", "category": "GPU|CPU|Storage|Motherboard|Peripherals|Cooling|PSU|Games|General",
-  "published_date": "ISO date string of when the article was published, e.g. 2025-07-22 — leave empty string if unknown", "caption_graphic": "the short caption for the image graphic", "caption_feed": "the longer, more detailed caption for the Facebook feed post", "highlight_words": ["1-3 key words or short product names from the headline to visually emphasize, e.g. product names, brand names, or standout numbers"]}]`;
+[
+  {
+    "headline": "the news headline",
+    "source": "publication name",
+    "url": "the exact direct article URL, or empty string if unknown — never the homepage",
+    "image_url": "direct URL to the article's main/hero image if you can identify one, otherwise empty string",
+    "category": "GPU|CPU|Storage|Motherboard|Peripherals|Cooling|PSU|Games|General",
+    "published_date": "REQUIRED — the date this article was published by the source, in YYYY-MM-DD format (e.g. 2026-07-22). This must be the actual source publish date, not today's date. If you truly cannot determine it, use empty string — but always try to find it from the article metadata or search result snippet.",
+    "caption_graphic": "the short caption for the image graphic",
+    "caption_feed": "the longer, more detailed caption for the Facebook feed post",
+    "highlight_words": ["1-3 key words or short product names from the headline to visually emphasize"]
+  }
+]`;
 }
 
 function buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyleParam){
