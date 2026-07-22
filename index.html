@@ -469,20 +469,6 @@
       <span class="chevron">▾</span>
     </div>
     <div class="sources-body">
-      <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
-        <span style="font-size:12.5px; color:var(--text-dim); white-space:nowrap;">Graphic style:</span>
-        <div class="tabs" id="graphicStyleToggle" style="margin-left:0;">
-          <button class="btn-ghost active" data-style="band" title="Photo on top, light band with caption below">Band</button>
-          <button class="btn-ghost" data-style="overlay" title="Text directly over the photo with a dark gradient">Photo Overlay</button>
-        </div>
-      </div>
-      <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
-        <span style="font-size:12.5px; color:var(--text-dim); white-space:nowrap;">Overlay text align:</span>
-        <div class="tabs" id="overlayAlignToggle" style="margin-left:0;">
-          <button class="btn-ghost active" data-align="left" title="Headline left-aligned, boxed at the bottom-left">Left</button>
-          <button class="btn-ghost" data-align="center" title="Headline centered, boxed in the middle">Center</button>
-        </div>
-      </div>
       <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap;">
         <span style="font-size:12px; color:var(--text-dim); white-space:nowrap; font-family:'IBM Plex Mono',monospace;">Quick select:</span>
         <select id="templateQuickSelect" style="flex:1; min-width:160px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:'Sora',sans-serif; font-size:13px; padding:8px 10px;">
@@ -490,13 +476,32 @@
         </select>
       </div>
       <div id="templateList"></div>
-      <div class="template-add-row">
-        <input type="text" id="templateNameInput" placeholder="Page name (e.g. TP Knows)" maxlength="40">
-        <input type="text" id="templateHandleInput" placeholder="handle (no @)" maxlength="40" spellcheck="false">
-        <input type="text" id="templateHashtagsInput" placeholder="Default hashtags, comma-separated (e.g. TechPH, PCBuildPH)" style="flex:1 1 100%;">
-        <input type="color" id="templateColorInput" value="#4ade80" title="Highlight/accent color for this page">
-        <button id="templateAddBtn">Add</button>
-      </div>
+      <details class="graphic-customize" style="margin-top:12px;">
+        <summary>⚙️ Graphic style, text align &amp; add a new page</summary>
+        <div class="graphic-customize-inner">
+          <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+            <span style="font-size:12.5px; color:var(--text-dim); white-space:nowrap;">Graphic style:</span>
+            <div class="tabs" id="graphicStyleToggle" style="margin-left:0;">
+              <button class="btn-ghost active" data-style="band" title="Photo on top, light band with caption below">Band</button>
+              <button class="btn-ghost" data-style="overlay" title="Text directly over the photo with a dark gradient">Photo Overlay</button>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+            <span style="font-size:12.5px; color:var(--text-dim); white-space:nowrap;">Overlay text align:</span>
+            <div class="tabs" id="overlayAlignToggle" style="margin-left:0;">
+              <button class="btn-ghost active" data-align="left" title="Headline left-aligned, boxed at the bottom-left">Left</button>
+              <button class="btn-ghost" data-align="center" title="Headline centered, boxed in the middle">Center</button>
+            </div>
+          </div>
+          <div class="template-add-row">
+            <input type="text" id="templateNameInput" placeholder="Page name (e.g. TP Knows)" maxlength="40">
+            <input type="text" id="templateHandleInput" placeholder="handle (no @)" maxlength="40" spellcheck="false">
+            <input type="text" id="templateHashtagsInput" placeholder="Default hashtags, comma-separated (e.g. TechPH, PCBuildPH)" style="flex:1 1 100%;">
+            <input type="color" id="templateColorInput" value="#4ade80" title="Highlight/accent color for this page">
+            <button id="templateAddBtn">Add</button>
+          </div>
+        </div>
+      </details>
       <p class="source-hint">Piliin ("Use") ang active na template bago mag-generate o mag-download — ito ang gagamitin sa @handle at highlight color ng graphic.</p>
     </div>
   </div>
@@ -1457,6 +1462,10 @@ function render(){
               ${d.imageData ? `
               <div class="image-position-controls">
                 <div class="image-position-row">
+                  <label>🔍 Zoom <span style="opacity:0.6;">(lower = less cropping)</span></label>
+                  <input type="range" min="100" max="200" value="${d.imageZoom || 115}" class="image-zoom" data-id="${d.id}">
+                </div>
+                <div class="image-position-row">
                   <label>↔ Horizontal</label>
                   <input type="range" min="0" max="100" value="${Math.round((d.imageOffsetX != null ? d.imageOffsetX : 0.5) * 100)}" class="image-offset-x" data-id="${d.id}">
                 </div>
@@ -1519,6 +1528,14 @@ feed.addEventListener('input', (e) => {
       d.tagColor = e.target.value;
       saveDrafts();
       drawGraphic(d); // live-update the tag pill color
+    }
+  } else if(e.target.classList.contains('image-zoom')){
+    const id = e.target.dataset.id;
+    const d = drafts.find(x => x.id === id);
+    if(d){
+      d.imageZoom = parseInt(e.target.value, 10);
+      saveDrafts();
+      drawGraphic(d);
     }
   } else if(e.target.classList.contains('image-offset-x')){
     const id = e.target.dataset.id;
@@ -1662,7 +1679,8 @@ feed.addEventListener('change', async (e) => {
     if(!file) return;
     const d = drafts.find(x => x.id === id);
     if(!d) return;
-    setStatus('Processing photo…');
+    const sizeMB = file.size / (1024 * 1024);
+    setStatus(sizeMB > 8 ? `Processing large photo (${sizeMB.toFixed(1)}MB)… this might take a moment` : 'Processing photo…');
     try{
       const dataUrl = await compressImage(file, 1080, 0.85);
       d.imageData = dataUrl;
@@ -1673,7 +1691,11 @@ feed.addEventListener('change', async (e) => {
       setStatus('');
     }catch(err){
       console.error(err);
-      setStatus('Could not process that image — try a different file.', true);
+      if(err.message === 'UNSUPPORTED_FORMAT'){
+        setStatus('Hindi ma-open ang photo na ito sa browser (madalas nangyayari sa HEIC mula sa iPhone) — i-save muna as JPG/PNG bago i-upload.', true);
+      } else {
+        setStatus('Could not process that image — try a different file.', true);
+      }
     }
   }
 });
@@ -1890,7 +1912,34 @@ Respond with ONLY the prompt text itself — no preamble, no quotes, no markdown
 }
 
 function compressImage(file, maxDim, quality){
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
+    // Large-photo fast path: createImageBitmap with resize options decodes
+    // straight to the target size instead of loading the full-resolution
+    // bitmap into memory first — much kinder to phones/older devices when
+    // the source is a 12MP+ camera photo. Falls back to the classic
+    // Image+canvas approach on browsers that don't support it (e.g. some
+    // older Safari versions).
+    if(typeof createImageBitmap === 'function'){
+      try{
+        const probe = await createImageBitmap(file); // just to read real dimensions
+        let w = probe.width, h = probe.height;
+        probe.close();
+        if(w >= h && w > maxDim){ h = Math.round(h * maxDim / w); w = maxDim; }
+        else if(h > w && h > maxDim){ w = Math.round(w * maxDim / h); h = maxDim; }
+        const bitmap = await createImageBitmap(file, { resizeWidth: w, resizeHeight: h, resizeQuality: 'high' });
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+        bitmap.close();
+        resolve(c.toDataURL('image/jpeg', quality));
+        return;
+      }catch(e){
+        // Fall through to the FileReader+Image path below — e.g. the
+        // browser's createImageBitmap doesn't decode this format either,
+        // or resize options aren't supported.
+      }
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       const img = new Image();
@@ -1903,7 +1952,7 @@ function compressImage(file, maxDim, quality){
         c.getContext('2d').drawImage(img, 0, 0, w, h);
         resolve(c.toDataURL('image/jpeg', quality));
       };
-      img.onerror = () => reject(new Error('Image load failed'));
+      img.onerror = () => reject(new Error('UNSUPPORTED_FORMAT'));
       img.src = reader.result;
     };
     reader.onerror = () => reject(new Error('File read failed'));
@@ -2301,7 +2350,7 @@ function drawGraphicBand(d){
             d._cropRectFor = d.imageData;
           }
           const crop = d._cropRect;
-          const OVERSCAN = 1.15;
+          const OVERSCAN = (d.imageZoom || 115) / 100; // 100 = tightest fit (least cropping), higher = more zoomed in
           const scale = Math.max(W / crop.sw, imgAreaH / crop.sh) * OVERSCAN;
           const iw = crop.sw * scale, ih = crop.sh * scale;
           const offsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
@@ -2417,7 +2466,7 @@ function drawGraphicOverlay(d){
             d._cropRectFor = d.imageData;
           }
           const crop = d._cropRect;
-          const OVERSCAN = 1.15;
+          const OVERSCAN = (d.imageZoom || 115) / 100; // 100 = tightest fit (least cropping), higher = more zoomed in
           const scale = Math.max(W / crop.sw, H / crop.sh) * OVERSCAN;
           const iw = crop.sw * scale, ih = crop.sh * scale;
           const offsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
