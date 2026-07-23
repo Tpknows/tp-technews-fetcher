@@ -1517,7 +1517,7 @@ function render(){
                 ` : ''}
                 <div class="image-position-row">
                   <label>🔍 Zoom</label>
-                  <input type="range" min="100" max="200" value="${d.imageZoom || 115}" class="image-zoom" data-id="${d.id}">
+                  <input type="range" min="${d.fitMode === 'fit' ? 50 : 100}" max="${d.fitMode === 'fit' ? 350 : 250}" value="${d.imageZoom || 115}" class="image-zoom" data-id="${d.id}">
                 </div>
                 <div class="image-position-row">
                   <label>↔ Horizontal</label>
@@ -2523,13 +2523,18 @@ function drawPhotoIntoArea(ctx, photoImg, crop, areaX, areaY, areaW, areaH, d){
     // backdrop alone is too uniformly dark to show any visible change, so
     // controlling the main image directly is the version that actually
     // looks different when you move the sliders.
-    const zoomPct = d.imageZoom || 115; // 100 = full size (edge-to-edge fit), 200 = ~half size
+    const zoomPct = d.imageZoom || 115; // Fit mode range: 50 = zoomed in / cropped past edge-to-edge, 100 = edge-to-edge fit (no crop), 350 = zoomed way out (lots of blurred backdrop showing)
     const fitScale = baseFitScale * (100 / zoomPct);
     const fw = full.sw * fitScale, fh = full.sh * fitScale;
     const offsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
     const offsetY = d.imageOffsetY != null ? d.imageOffsetY : 0.5;
     const fx = areaX + (areaW - fw) * offsetX, fy = areaY + (areaH - fh) * offsetY;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(areaX, areaY, areaW, areaH);
+    ctx.clip();
     ctx.drawImage(photoImg, full.sx, full.sy, full.sw, full.sh, fx, fy, fw, fh);
+    ctx.restore();
   } else {
     // Cover-fit with a small overscan so both pan sliders always have real
     // range (without it, a landscape photo leaves zero vertical slack, and
