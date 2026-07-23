@@ -1730,11 +1730,18 @@ feed.addEventListener('click', async (e) => {
       setStatus('Clipboard blocked — select and copy the prompt manually.', true);
     }
   } else if(action === 'approve'){
-    d.status = 'approved'; await saveDrafts(true); render();
+    d.status = 'approved';
+    await saveDrafts(true);
     const activeTpl = getActiveTemplate();
     if(activeTpl && activeTpl.autoPost){
+      // Do this BEFORE render() — render() rebuilds the feed from the
+      // current tab filter, and once status flips to 'approved' this card
+      // (and its canvas) disappears from view if you're on e.g. the Draft
+      // tab instead of All. Posting first, while the existing canvas is
+      // still in the DOM, avoids grabbing a null/missing canvas.
       await postToFacebook(d); // per-page toggle — only pages with "🟢 Auto-post" set do this
     }
+    render();
   } else if(action === 'posted'){
     d.status = 'posted'; await saveDrafts(true); render();
   } else if(action === 'delete'){
@@ -1799,6 +1806,7 @@ const PROXY_URL = "https://tp-technews-fetcher.tammy-padal.workers.dev";
 // this fails gracefully with a clear status message instead of silently
 // doing nothing.
 async function postToFacebook(d){
+  await drawGraphic(d); // ensure the canvas is fully drawn (async font load) before we capture it — otherwise the approve→render()→postToFacebook sequence can grab a still-blank canvas
   const canvas = document.getElementById(`canvas-${d.id}`);
   if(!canvas){
     setStatus('Walang na-render na graphic para i-post — kailangan munang may photo/graphic bago mag-Approve.', true);
