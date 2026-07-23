@@ -1479,7 +1479,7 @@ function render(){
                   </div>
                 </div>
                 <div class="image-position-row">
-                  <label>🔍 Zoom ${(d.fitMode === 'fit') ? '<span style="opacity:0.6;">(background blur lang, di apektado ang buong picture)</span>' : '<span style="opacity:0.6;">(lower = less cropping)</span>'}</label>
+                  <label>🔍 Zoom</label>
                   <input type="range" min="100" max="200" value="${d.imageZoom || 115}" class="image-zoom" data-id="${d.id}">
                 </div>
                 <div class="image-position-row">
@@ -2350,29 +2350,35 @@ function drawPhotoIntoArea(ctx, photoImg, crop, areaX, areaY, areaW, areaH, d){
     // large intentional dark backgrounds, incorrectly trimming into the
     // actual subject).
     const full = { sx: 0, sy: 0, sw: photoImg.naturalWidth || photoImg.width, sh: photoImg.naturalHeight || photoImg.height };
+    const baseFitScale = Math.min(areaW / full.sw, areaH / full.sh);
+
     // Blurred cover-fill backdrop so the letterbox gaps aren't stark bars.
-    // The Zoom/Horizontal/Vertical sliders still do something useful here —
-    // they control this backdrop layer (the main photo itself always stays
-    // fully visible and centered, since that's the point of Fit mode).
     ctx.save();
     ctx.beginPath();
     ctx.rect(areaX, areaY, areaW, areaH);
     ctx.clip();
-    const bgZoom = (d.imageZoom || 115) / 100;
-    const bgScale = Math.max(areaW / full.sw, areaH / full.sh) * Math.max(1.15, bgZoom);
+    const bgScale = Math.max(areaW / full.sw, areaH / full.sh) * 1.15; // slight overscan hides blur edge artifacts
     const bgW = full.sw * bgScale, bgH = full.sh * bgScale;
-    const bgOffsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
-    const bgOffsetY = d.imageOffsetY != null ? d.imageOffsetY : 0.5;
-    const bgX = areaX + (areaW - bgW) * bgOffsetX, bgY = areaY + (areaH - bgH) * bgOffsetY;
+    const bgX = areaX + (areaW - bgW) / 2, bgY = areaY + (areaH - bgH) / 2;
     ctx.filter = 'blur(24px) brightness(0.55)';
     ctx.drawImage(photoImg, full.sx, full.sy, full.sw, full.sh, bgX, bgY, bgW, bgH);
     ctx.filter = 'none';
     ctx.restore();
 
-    // The full photo, contained (nothing cropped), centered in the area
-    const fitScale = Math.min(areaW / full.sw, areaH / full.sh);
+    // The full photo, contained (nothing ever cropped) — but the
+    // Zoom/Horizontal/Vertical sliders still do something clearly visible
+    // here: Zoom shrinks the image within the frame (more backdrop shows
+    // around it), and the pan sliders reposition that now-smaller image
+    // within the available space. On many product shots the blurred
+    // backdrop alone is too uniformly dark to show any visible change, so
+    // controlling the main image directly is the version that actually
+    // looks different when you move the sliders.
+    const zoomPct = d.imageZoom || 115; // 100 = full size (edge-to-edge fit), 200 = ~half size
+    const fitScale = baseFitScale * (100 / zoomPct);
     const fw = full.sw * fitScale, fh = full.sh * fitScale;
-    const fx = areaX + (areaW - fw) / 2, fy = areaY + (areaH - fh) / 2;
+    const offsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
+    const offsetY = d.imageOffsetY != null ? d.imageOffsetY : 0.5;
+    const fx = areaX + (areaW - fw) * offsetX, fy = areaY + (areaH - fh) * offsetY;
     ctx.drawImage(photoImg, full.sx, full.sy, full.sw, full.sh, fx, fy, fw, fh);
   } else {
     // Cover-fit with a small overscan so both pan sliders always have real
