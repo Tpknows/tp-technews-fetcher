@@ -167,6 +167,7 @@
   .card[data-status="draft"] .pin{ background: var(--amber); }
   .card[data-status="approved"] .pin{ background: var(--trace); box-shadow: 0 0 10px var(--trace); }
   .card[data-status="posted"] .pin{ background: var(--gray); }
+  .card[data-status="scheduled"] .pin{ background: #5aa9e0; box-shadow: 0 0 10px #5aa9e0; }
 
   .card-body{ flex: 1; min-width: 0; }
 
@@ -215,6 +216,21 @@
   .card[data-status="draft"] .status-pill{ color: var(--amber); }
   .card[data-status="approved"] .status-pill{ color: var(--trace); }
   .card[data-status="posted"] .status-pill{ color: var(--gray); }
+  .card[data-status="scheduled"] .status-pill{ color: #5aa9e0; }
+  .schedule-input{
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 8px; color: var(--text);
+    font-family: 'Sora', sans-serif; font-size: 12.5px;
+    padding: 7px 9px;
+  }
+  .schedule-input:focus{ outline: none; border-color: var(--trace-dim); }
+  .mini-btn.schedule{ color: #5aa9e0; }
+  .mini-btn.cancel-schedule{ color: var(--danger); }
+  .scheduled-info{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px; color: #5aa9e0;
+    margin: 0 0 10px;
+  }
 
   .dupe-badge{
     font-family: 'IBM Plex Mono', monospace;
@@ -478,6 +494,7 @@
       <button class="sidebar-item active" data-filter="all">📋 All</button>
       <button class="sidebar-item" data-filter="draft">📝 Draft</button>
       <button class="sidebar-item" data-filter="approved">✅ Approved</button>
+      <button class="sidebar-item" data-filter="scheduled">📅 Scheduled</button>
       <button class="sidebar-item" data-filter="posted">📤 Posted</button>
       <button class="sidebar-item" data-filter="games">🎮 Games</button>
       <div class="sidebar-section-label">Tools</div>
@@ -1464,6 +1481,7 @@ function render(){
         </div>
         <h3 class="headline">${escapeHtml(d.headline)}</h3>
         <p class="source-line">${escapeHtml(d.source || '')}${d.url ? ` · <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">source ↗</a>` : ''}${d.publishedDate ? ` · <span style="display:inline-flex;align-items:center;gap:3px;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-size:11px;color:var(--text-dim);font-family:'IBM Plex Mono',monospace;">📅 ${escapeHtml(d.publishedDate)}</span>` : '<span style="display:inline-flex;align-items:center;gap:3px;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-size:11px;color:#666;font-family:\'IBM Plex Mono\',monospace;opacity:0.5;">📅 date unknown</span>'}</p>
+        ${d.status === 'scheduled' && d.scheduledTime ? `<p class="scheduled-info">📅 Naka-schedule para: ${escapeHtml(new Date(d.scheduledTime * 1000).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' }))}</p>` : ''}
         <span class="graphic-label">Caption for Facebook post/feed</span>
         <textarea data-id="${d.id}" class="caption-input">${escapeHtml(d.caption)}</textarea>
         <div class="graphic-block">
@@ -1544,8 +1562,13 @@ function render(){
         <div class="card-actions">
           <button class="mini-btn copy" data-action="copy" data-id="${d.id}">Copy feed caption</button>
           ${d.status === 'draft' ? `<button class="mini-btn approve" data-action="approve" data-id="${d.id}">✓ Approve</button>` : ''}
+          ${d.status === 'draft' ? `
+            <input type="datetime-local" class="schedule-input" data-id="${d.id}" min="${new Date(Date.now() + 11 * 60000).toISOString().slice(0,16)}">
+            <button class="mini-btn schedule" data-action="schedule" data-id="${d.id}">📅 Schedule</button>
+          ` : ''}
           ${d.status === 'approved' ? `<button class="mini-btn posted" data-action="posted" data-id="${d.id}">Mark posted</button>` : ''}
           ${d.status === 'approved' ? `<button class="mini-btn recall" data-action="recall" data-id="${d.id}" title="Ibalik sa Draft para ma-edit at mag-Approve ulit">↩ Recall</button>` : ''}
+          ${d.status === 'scheduled' ? `<button class="mini-btn cancel-schedule" data-action="cancel-schedule" data-id="${d.id}">🗑 Cancel Schedule</button>` : ''}
           <button class="mini-btn delete" data-action="delete" data-id="${d.id}">Delete</button>
         </div>
         </div><!-- /card-left -->
@@ -1755,6 +1778,10 @@ feed.addEventListener('click', async (e) => {
     await saveDrafts(true);
     render();
     setStatus(`"${(d.headline || '').slice(0, 50)}" ibinalik sa Draft.`);
+  } else if(action === 'schedule'){
+    await scheduleDraft(d, btn);
+  } else if(action === 'cancel-schedule'){
+    await cancelScheduledPost(d, btn);
   } else if(action === 'delete'){
     drafts = drafts.filter(x => x.id !== id);
     await saveDrafts(true); render();
@@ -1816,19 +1843,22 @@ const PROXY_URL = "https://tp-technews-fetcher.tammy-padal.workers.dev";
 // still need to be set up before this actually posts anywhere — until then
 // this fails gracefully with a clear status message instead of silently
 // doing nothing.
-async function postToFacebook(d){
+async function postToFacebook(d, scheduledTimestamp = null){
   await drawGraphic(d); // ensure the canvas is fully drawn (async font load) before we capture it — otherwise the approve→render()→postToFacebook sequence can grab a still-blank canvas
   const canvas = document.getElementById(`canvas-${d.id}`);
   if(!canvas){
     setStatus('Walang na-render na graphic para i-post — kailangan munang may photo/graphic bago mag-Approve.', true);
     return;
   }
-  setStatus(`🚀 Auto-posting "${(d.headline || '').slice(0, 40)}…" sa Facebook…`);
+  setStatus(scheduledTimestamp
+    ? `📅 Nagse-schedule ng "${(d.headline || '').slice(0, 40)}…"…`
+    : `🚀 Auto-posting "${(d.headline || '').slice(0, 40)}…" sa Facebook…`);
   try{
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.96));
     const formData = new FormData();
     formData.append('image', blob, 'post.jpg');
     formData.append('caption', d.caption || '');
+    if(scheduledTimestamp) formData.append('scheduledTime', String(scheduledTimestamp));
     const res = await fetch(`${PROXY_URL}/post-to-facebook`, { method: 'POST', body: formData });
 
     // Read as text first — a Worker/Cloudflare-level failure (bad route,
@@ -1844,13 +1874,83 @@ async function postToFacebook(d){
       throw new Error(detail);
     }
 
-    d.status = 'posted';
-    await saveDrafts(true);
-    render();
-    setStatus('✅ Na-post na sa Facebook!');
+    if(scheduledTimestamp){
+      d.status = 'scheduled';
+      d.scheduledTime = scheduledTimestamp;
+      d.fbPostId = data.postId || null;
+      await saveDrafts(true);
+      render();
+      setStatus(`✅ Na-schedule na para sa ${new Date(scheduledTimestamp * 1000).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}!`);
+    } else {
+      d.status = 'posted';
+      await saveDrafts(true);
+      render();
+      setStatus('✅ Na-post na sa Facebook!');
+    }
   }catch(err){
     console.error('Auto-post failed:', err);
     setStatus(`⚠️ Hindi na-post sa Facebook: ${err.message || 'unknown error'}`, true);
+  }
+}
+
+// Reads the datetime-local input next to a draft's Schedule button,
+// converts it to a unix-seconds timestamp, does a basic client-side sanity
+// check (Facebook itself also enforces the 10min-6month window server-side,
+// this just avoids an obviously-doomed round trip), and hands off to
+// postToFacebook with that timestamp so it schedules instead of posting now.
+async function scheduleDraft(d, btn){
+  const input = document.querySelector(`.schedule-input[data-id="${d.id}"]`);
+  if(!input || !input.value){
+    setStatus('Pumili muna ng petsa at oras bago mag-Schedule.', true);
+    return;
+  }
+  const chosenDate = new Date(input.value);
+  const ts = Math.floor(chosenDate.getTime() / 1000);
+  const nowSec = Math.floor(Date.now() / 1000);
+  if(ts < nowSec + 10 * 60){
+    setStatus('Dapat hindi bababa sa 10 minuto mula ngayon ang schedule time (Facebook requirement).', true);
+    return;
+  }
+  if(btn){ btn.disabled = true; btn.textContent = 'Nagse-schedule…'; }
+  await postToFacebook(d, ts);
+  if(btn){ btn.disabled = false; btn.textContent = '📅 Schedule'; }
+}
+
+// Cancels a scheduled (not-yet-published) Facebook post via the Worker's
+// /cancel-scheduled-post route, then reverts the local draft back to
+// 'draft' status so it can be re-edited or re-scheduled.
+async function cancelScheduledPost(d, btn){
+  if(!d.fbPostId){
+    // No Facebook post ID on record (e.g. an older draft from before this
+    // field existed) — nothing to cancel server-side, just revert locally.
+    d.status = 'draft';
+    d.scheduledTime = null;
+    await saveDrafts(true);
+    render();
+    return;
+  }
+  if(btn){ btn.disabled = true; btn.textContent = 'Kinakansela…'; }
+  setStatus('Kinakansela ang naka-schedule na post…');
+  try{
+    const res = await fetch(`${PROXY_URL}/cancel-scheduled-post`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ postId: d.fbPostId })
+    });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok || data.error){
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+    d.status = 'draft';
+    d.scheduledTime = null;
+    d.fbPostId = null;
+    await saveDrafts(true);
+    render();
+    setStatus('✅ Na-cancel ang scheduled post — nasa Draft na ulit.');
+  }catch(err){
+    console.error('Cancel scheduled post failed:', err);
+    setStatus(`⚠️ Hindi na-cancel: ${err.message || 'unknown error'}`, true);
+    if(btn){ btn.disabled = false; btn.textContent = '🗑 Cancel Schedule'; }
   }
 }
 
@@ -2515,16 +2615,13 @@ function drawPhotoIntoArea(ctx, photoImg, crop, areaX, areaY, areaW, areaH, d){
     ctx.filter = 'none';
     ctx.restore();
 
-    // The full photo, contained (nothing ever cropped) — but the
-    // Zoom/Horizontal/Vertical sliders still do something clearly visible
-    // here: Zoom shrinks the image within the frame (more backdrop shows
-    // around it), and the pan sliders reposition that now-smaller image
-    // within the available space. On many product shots the blurred
-    // backdrop alone is too uniformly dark to show any visible change, so
-    // controlling the main image directly is the version that actually
-    // looks different when you move the sliders.
-    const zoomPct = d.imageZoom || 115; // Fit mode range: 50 = zoomed in / cropped past edge-to-edge, 100 = edge-to-edge fit (no crop), 350 = zoomed way out (lots of blurred backdrop showing)
-    const fitScale = baseFitScale * (100 / zoomPct);
+    // The full photo, contained by default — the Zoom slider now works the
+    // same direction as Cover mode: higher value = zoom IN (image grows,
+    // can exceed the canvas and gets cropped by the clip below), lower
+    // value = zoom OUT (image shrinks, more blurred backdrop shows around
+    // it). 100 = exact edge-to-edge fit, nothing cropped, nothing exceeds.
+    const zoomPct = d.imageZoom || 115; // Fit mode range: 50 = zoomed out (more backdrop), 100 = edge-to-edge fit (no crop), 350 = zoomed way in (crops past the canvas)
+    const fitScale = baseFitScale * (zoomPct / 100);
     const fw = full.sw * fitScale, fh = full.sh * fitScale;
     const offsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
     const offsetY = d.imageOffsetY != null ? d.imageOffsetY : 0.5;
