@@ -1478,9 +1478,8 @@ function render(){
                     <button type="button" class="mini-btn image-fitmode-btn ${d.fitMode === 'fit' ? 'active' : ''}" data-action="set-fitmode" data-mode="fit" data-id="${d.id}" title="Buong photo makikita, walang cropping, blurred fill sa gilid">Fit (buong picture)</button>
                   </div>
                 </div>
-                ${(d.fitMode || 'cover') === 'cover' ? `
                 <div class="image-position-row">
-                  <label>🔍 Zoom <span style="opacity:0.6;">(lower = less cropping)</span></label>
+                  <label>🔍 Zoom ${(d.fitMode === 'fit') ? '<span style="opacity:0.6;">(background blur lang, di apektado ang buong picture)</span>' : '<span style="opacity:0.6;">(lower = less cropping)</span>'}</label>
                   <input type="range" min="100" max="200" value="${d.imageZoom || 115}" class="image-zoom" data-id="${d.id}">
                 </div>
                 <div class="image-position-row">
@@ -1491,7 +1490,6 @@ function render(){
                   <label>↕ Vertical</label>
                   <input type="range" min="0" max="100" value="${Math.round((d.imageOffsetY != null ? d.imageOffsetY : 0.5) * 100)}" class="image-offset-y" data-id="${d.id}">
                 </div>
-                ` : ''}
               </div>
               ` : ''}
               <div class="graphic-controls" style="margin-top:4px;">
@@ -2352,14 +2350,20 @@ function drawPhotoIntoArea(ctx, photoImg, crop, areaX, areaY, areaW, areaH, d){
     // large intentional dark backgrounds, incorrectly trimming into the
     // actual subject).
     const full = { sx: 0, sy: 0, sw: photoImg.naturalWidth || photoImg.width, sh: photoImg.naturalHeight || photoImg.height };
-    // Blurred cover-fill backdrop so the letterbox gaps aren't stark bars
+    // Blurred cover-fill backdrop so the letterbox gaps aren't stark bars.
+    // The Zoom/Horizontal/Vertical sliders still do something useful here —
+    // they control this backdrop layer (the main photo itself always stays
+    // fully visible and centered, since that's the point of Fit mode).
     ctx.save();
     ctx.beginPath();
     ctx.rect(areaX, areaY, areaW, areaH);
     ctx.clip();
-    const bgScale = Math.max(areaW / full.sw, areaH / full.sh) * 1.15; // slight overscan hides blur edge artifacts
+    const bgZoom = (d.imageZoom || 115) / 100;
+    const bgScale = Math.max(areaW / full.sw, areaH / full.sh) * Math.max(1.15, bgZoom);
     const bgW = full.sw * bgScale, bgH = full.sh * bgScale;
-    const bgX = areaX + (areaW - bgW) / 2, bgY = areaY + (areaH - bgH) / 2;
+    const bgOffsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
+    const bgOffsetY = d.imageOffsetY != null ? d.imageOffsetY : 0.5;
+    const bgX = areaX + (areaW - bgW) * bgOffsetX, bgY = areaY + (areaH - bgH) * bgOffsetY;
     ctx.filter = 'blur(24px) brightness(0.55)';
     ctx.drawImage(photoImg, full.sx, full.sy, full.sw, full.sh, bgX, bgY, bgW, bgH);
     ctx.filter = 'none';
