@@ -222,6 +222,7 @@
   .mini-btn.approve{ color: var(--trace); }
   .mini-btn.posted{ color: var(--gray); }
   .mini-btn.delete{ color: var(--danger); margin-left: auto; }
+  .mini-btn.active{ background: var(--trace-dim); color: #0a0f0d; border-color: var(--trace); font-weight: 600; }
 
   .empty{
     text-align: center; padding: 60px 20px; color: var(--text-dim);
@@ -1471,6 +1472,14 @@ function render(){
               ${d.imageData ? `
               <div class="image-position-controls">
                 <div class="image-position-row">
+                  <label>🖼️ Image mode</label>
+                  <div class="tabs" style="margin-left:0;">
+                    <button type="button" class="mini-btn image-fitmode-btn ${(d.fitMode || 'cover') === 'cover' ? 'active' : ''}" data-action="set-fitmode" data-mode="cover" data-id="${d.id}" title="Punuin ang buong frame, may cinu-crop">Cover</button>
+                    <button type="button" class="mini-btn image-fitmode-btn ${d.fitMode === 'fit' ? 'active' : ''}" data-action="set-fitmode" data-mode="fit" data-id="${d.id}" title="Buong photo makikita, walang cropping, blurred fill sa gilid">Fit (buong picture)</button>
+                  </div>
+                </div>
+                ${(d.fitMode || 'cover') === 'cover' ? `
+                <div class="image-position-row">
                   <label>🔍 Zoom <span style="opacity:0.6;">(lower = less cropping)</span></label>
                   <input type="range" min="100" max="200" value="${d.imageZoom || 115}" class="image-zoom" data-id="${d.id}">
                 </div>
@@ -1482,6 +1491,7 @@ function render(){
                   <label>↕ Vertical</label>
                   <input type="range" min="0" max="100" value="${Math.round((d.imageOffsetY != null ? d.imageOffsetY : 0.5) * 100)}" class="image-offset-y" data-id="${d.id}">
                 </div>
+                ` : ''}
               </div>
               ` : ''}
               <div class="graphic-controls" style="margin-top:4px;">
@@ -1587,6 +1597,10 @@ feed.addEventListener('click', async (e) => {
     d.tagColor = btn.dataset.color;
     saveDrafts();
     render(); // full render so the text input + color swatch reflect the preset
+  } else if(action === 'set-fitmode'){
+    d.fitMode = btn.dataset.mode;
+    saveDrafts();
+    render(); // full render — the pan/zoom sliders show/hide depending on mode
   } else if(action === 'reset-font-size'){
     d.fontSizeOverride = null;
     saveDrafts();
@@ -2324,6 +2338,51 @@ function drawCategoryBackground(ctx, W, imgAreaH, category){
   ctx.restore();
 }
 
+// Draws a photo into a rectangular area, either:
+// - "cover" (default): fills the area edge-to-edge, cropping as needed —
+//   the adjustable-crop behavior with zoom/pan sliders.
+// - "fit": shows the ENTIRE photo with nothing cropped off, letterboxed
+//   with a blurred/darkened copy of the same photo filling the gaps
+//   instead of plain bars.
+function drawPhotoIntoArea(ctx, photoImg, crop, areaX, areaY, areaW, areaH, d){
+  if(d.fitMode === 'fit'){
+    // Blurred cover-fill backdrop so the letterbox gaps aren't stark bars
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(areaX, areaY, areaW, areaH);
+    ctx.clip();
+    const bgScale = Math.max(areaW / crop.sw, areaH / crop.sh) * 1.15; // slight overscan hides blur edge artifacts
+    const bgW = crop.sw * bgScale, bgH = crop.sh * bgScale;
+    const bgX = areaX + (areaW - bgW) / 2, bgY = areaY + (areaH - bgH) / 2;
+    ctx.filter = 'blur(24px) brightness(0.55)';
+    ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, bgX, bgY, bgW, bgH);
+    ctx.filter = 'none';
+    ctx.restore();
+
+    // The full photo, contained (nothing cropped), centered in the area
+    const fitScale = Math.min(areaW / crop.sw, areaH / crop.sh);
+    const fw = crop.sw * fitScale, fh = crop.sh * fitScale;
+    const fx = areaX + (areaW - fw) / 2, fy = areaY + (areaH - fh) / 2;
+    ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, fx, fy, fw, fh);
+  } else {
+    // Cover-fit with a small overscan so both pan sliders always have real
+    // range (without it, a landscape photo leaves zero vertical slack, and
+    // a portrait photo leaves zero horizontal slack).
+    const OVERSCAN = (d.imageZoom || 115) / 100; // 100 = tightest fit (least cropping), higher = more zoomed in
+    const scale = Math.max(areaW / crop.sw, areaH / crop.sh) * OVERSCAN;
+    const iw = crop.sw * scale, ih = crop.sh * scale;
+    const offsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
+    const offsetY = d.imageOffsetY != null ? d.imageOffsetY : 0.5;
+    const ix = areaX + (areaW - iw) * offsetX, iy = areaY + (areaH - ih) * offsetY;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(areaX, areaY, areaW, areaH);
+    ctx.clip();
+    ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, ix, iy, iw, ih);
+    ctx.restore();
+  }
+}
+
 function drawGraphicBand(d){
   return new Promise((resolve) => {
     const canvas = document.getElementById(`canvas-${d.id}`);
@@ -2392,28 +2451,11 @@ function drawGraphicBand(d){
         ctx.fillRect(0, 0, W, H);
 
         if(photoImg){
-          // ── Draw real photo (top, cover-fit, adjustable crop position) ─
-          // A small overscan (beyond the strict minimum cover-fit scale) is
-          // applied so BOTH sliders always have real pan range — without it,
-          // a landscape photo leaves zero vertical slack (and a portrait
-          // photo leaves zero horizontal slack), making one slider a no-op.
           if(d._cropRectFor !== d.imageData){
             d._cropRect = computeContentCropRect(photoImg);
             d._cropRectFor = d.imageData;
           }
-          const crop = d._cropRect;
-          const OVERSCAN = (d.imageZoom || 115) / 100; // 100 = tightest fit (least cropping), higher = more zoomed in
-          const scale = Math.max(W / crop.sw, imgAreaH / crop.sh) * OVERSCAN;
-          const iw = crop.sw * scale, ih = crop.sh * scale;
-          const offsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
-          const offsetY = d.imageOffsetY != null ? d.imageOffsetY : 0.5;
-          const ix = (W - iw) * offsetX, iy = (imgAreaH - ih) * offsetY;
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(0, 0, W, imgAreaH);
-          ctx.clip();
-          ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, ix, iy, iw, ih);
-          ctx.restore();
+          drawPhotoIntoArea(ctx, photoImg, d._cropRect, 0, 0, W, imgAreaH, d);
         } else {
           // ── No photo available — auto category background ───
           drawCategoryBackground(ctx, W, imgAreaH, d.category);
@@ -2511,20 +2553,11 @@ function drawGraphicOverlay(d){
 
         // ── Photo fills the ENTIRE canvas (cover-fit, adjustable crop) ──
         if(photoImg){
-          // Overscan so both sliders always have real pan range (see note
-          // in the Band style renderer above for why this is needed).
           if(d._cropRectFor !== d.imageData){
             d._cropRect = computeContentCropRect(photoImg);
             d._cropRectFor = d.imageData;
           }
-          const crop = d._cropRect;
-          const OVERSCAN = (d.imageZoom || 115) / 100; // 100 = tightest fit (least cropping), higher = more zoomed in
-          const scale = Math.max(W / crop.sw, H / crop.sh) * OVERSCAN;
-          const iw = crop.sw * scale, ih = crop.sh * scale;
-          const offsetX = d.imageOffsetX != null ? d.imageOffsetX : 0.5;
-          const offsetY = d.imageOffsetY != null ? d.imageOffsetY : 0.5;
-          const ix = (W - iw) * offsetX, iy = (H - ih) * offsetY;
-          ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, ix, iy, iw, ih);
+          drawPhotoIntoArea(ctx, photoImg, d._cropRect, 0, 0, W, H, d);
         } else {
           drawCategoryBackground(ctx, W, H, d.category);
         }
