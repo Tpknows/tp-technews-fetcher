@@ -1505,8 +1505,15 @@ function render(){
                   <div class="tabs" style="margin-left:0;">
                     <button type="button" class="mini-btn image-fitmode-btn ${(d.fitMode || 'cover') === 'cover' ? 'active' : ''}" data-action="set-fitmode" data-mode="cover" data-id="${d.id}" title="Punuin ang buong frame, may cinu-crop">Cover</button>
                     <button type="button" class="mini-btn image-fitmode-btn ${d.fitMode === 'fit' ? 'active' : ''}" data-action="set-fitmode" data-mode="fit" data-id="${d.id}" title="Buong photo makikita, walang cropping, blurred fill sa gilid">Fit (buong picture)</button>
+                    <button type="button" class="mini-btn image-fitmode-btn ${d.fitMode === 'cutout' ? 'active' : ''}" data-action="set-fitmode" data-mode="cutout" data-id="${d.id}" title="Auto-alisin ang white/light background ng litrato, palitan ng sarili nating branded background">🪄 Alisin ang white bg</button>
                   </div>
                 </div>
+                ${d.fitMode === 'cutout' ? `
+                <div class="image-position-row">
+                  <label>🎚️ Sensitivity</label>
+                  <input type="range" min="180" max="250" value="${d.cutoutThreshold || 225}" class="image-cutout-threshold" data-id="${d.id}" title="Mas mababa = mas kaunti lang ang malinis na puti ang matatanggal. Mas mataas = mas marami, pero baka kasama na yung light-colored parts ng product.">
+                </div>
+                ` : ''}
                 <div class="image-position-row">
                   <label>🔍 Zoom</label>
                   <input type="range" min="100" max="200" value="${d.imageZoom || 115}" class="image-zoom" data-id="${d.id}">
@@ -1591,6 +1598,15 @@ feed.addEventListener('input', (e) => {
     const d = drafts.find(x => x.id === id);
     if(d){
       d.imageZoom = parseInt(e.target.value, 10);
+      saveDrafts();
+      drawGraphic(d);
+    }
+  } else if(e.target.classList.contains('image-cutout-threshold')){
+    const id = e.target.dataset.id;
+    const d = drafts.find(x => x.id === id);
+    if(d){
+      d.cutoutThreshold = parseInt(e.target.value, 10);
+      d._cutoutFor = null; // force re-processing at the new sensitivity
       saveDrafts();
       drawGraphic(d);
     }
@@ -1795,16 +1811,27 @@ async function postToFacebook(d){
     formData.append('image', blob, 'post.jpg');
     formData.append('caption', d.caption || '');
     const res = await fetch(`${PROXY_URL}/post-to-facebook`, { method: 'POST', body: formData });
-    if(!res.ok) throw new Error(`Worker responded ${res.status}`);
-    const data = await res.json();
-    if(data.error) throw new Error(data.error);
+
+    // Read as text first — a Worker/Cloudflare-level failure (bad route,
+    // crash, timeout) often comes back as plain text or an HTML error page,
+    // not JSON, so response.json() alone would throw and hide the real
+    // status code + body from view.
+    const rawText = await res.text();
+    let data = {};
+    try{ data = JSON.parse(rawText); }catch(e){ /* not JSON — keep rawText for the error message below */ }
+
+    if(!res.ok || data.error){
+      const detail = data.error || rawText.slice(0, 300) || `HTTP ${res.status}`;
+      throw new Error(detail);
+    }
+
     d.status = 'posted';
     await saveDrafts(true);
     render();
     setStatus('✅ Na-post na sa Facebook!');
   }catch(err){
     console.error('Auto-post failed:', err);
-    setStatus('⚠️ Naka-enable ang Auto-post pero hindi pa gumagana — kailangan pang i-set up ang /post-to-facebook endpoint sa Worker (kasama ang Meta App + Page Access Token). Manual muna: i-download at i-post mismo.', true);
+    setStatus(`⚠️ Hindi na-post sa Facebook: ${err.message || 'unknown error'}`, true);
   }
 }
 
@@ -2237,6 +2264,49 @@ function computeContentCropRect(img){
   }
 }
 
+// Removes a near-white/light-neutral background from a photo, returning a
+// canvas with those pixels made transparent (feathered, not a hard cutout
+// edge). Meant for typical e-commerce product shots on a clean white
+// background — a simple brightness+neutrality threshold, not a real ML
+// background remover, so results vary on busy, gradient, or off-white
+// backgrounds, and can eat into light-colored parts of the product itself
+// (a white GPU shroud, pale packaging) if the sensitivity is too high —
+// that's what the "Sensitivity" slider is for.
+//
+// threshold (default 225): brightness (0-255) above which a neutral-gray
+// pixel starts fading to transparent. Lower = more conservative (only the
+// cleanest whites go); higher = more aggressive (keeps more of the photo,
+// but risks not fully clearing an off-white background).
+function removeWhiteBackground(img, threshold = 225){
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const cctx = c.getContext('2d');
+  cctx.drawImage(img, 0, 0, w, h);
+
+  try{
+    const imageData = cctx.getImageData(0, 0, w, h);
+    const data = imageData.data;
+    const FADE_FROM = threshold;       // below this brightness, fully opaque
+    const SOLID_AT = Math.min(255, threshold + 22); // at/above this, fully transparent
+    const NEUTRAL_TOLERANCE = 20; // how close R/G/B must be to count as "gray/white" rather than a saturated color
+
+    for(let i = 0; i < data.length; i += 4){
+      const r = data[i], g = data[i+1], b = data[i+2];
+      const brightness = (r + g + b) / 3;
+      if(brightness <= FADE_FROM) continue; // clearly not background — leave opaque
+      const maxDiff = Math.max(Math.abs(r-g), Math.abs(g-b), Math.abs(r-b));
+      if(maxDiff > NEUTRAL_TOLERANCE) continue; // saturated color (not white/gray) — keep it, even if bright
+      const t = Math.min(1, (brightness - FADE_FROM) / (SOLID_AT - FADE_FROM));
+      data[i+3] = Math.round(data[i+3] * (1 - t));
+    }
+    cctx.putImageData(imageData, 0, 0);
+  }catch(e){
+    console.warn('White-background removal skipped (tainted canvas):', e);
+  }
+  return c;
+}
+
 // Auto-fits the headline into a given box by shrinking the font size (in 1px
 // steps) until the wrapped text's line count AND total block height both fit
 // — instead of a fixed font size that overflows on long headlines or looks
@@ -2376,13 +2446,34 @@ function drawCategoryBackground(ctx, W, imgAreaH, category){
   ctx.restore();
 }
 
-// Draws a photo into a rectangular area, either:
+// Draws a photo into a rectangular area, in one of three modes:
 // - "cover" (default): fills the area edge-to-edge, cropping as needed —
 //   the adjustable-crop behavior with zoom/pan sliders.
 // - "fit": shows the ENTIRE photo with nothing cropped off, letterboxed
 //   with a blurred/darkened copy of the same photo filling the gaps
 //   instead of plain bars.
+// - "cutout": strips the photo's own (near-white) background out and draws
+//   our own branded category background behind the product instead — for
+//   typical white-background product shots that would otherwise look like
+//   a pasted-in e-commerce photo against our dark graphic style.
 function drawPhotoIntoArea(ctx, photoImg, crop, areaX, areaY, areaW, areaH, d){
+  if(d.fitMode === 'cutout'){
+    drawCategoryBackground(ctx, areaW, areaH, d.category);
+
+    const threshold = d.cutoutThreshold || 225;
+    const cacheKey = `${d.imageData}|${threshold}`;
+    if(d._cutoutFor !== cacheKey){
+      d._cutoutCanvas = removeWhiteBackground(photoImg, threshold);
+      d._cutoutFor = cacheKey;
+    }
+    const cutout = d._cutoutCanvas;
+    const scale = Math.min(areaW / cutout.width, areaH / cutout.height) * 0.86; // inset padding so the product doesn't touch the edges
+    const cw = cutout.width * scale, chh = cutout.height * scale;
+    const cx = areaX + (areaW - cw) / 2, cyy = areaY + (areaH - chh) / 2;
+    ctx.drawImage(cutout, cx, cyy, cw, chh);
+    return;
+  }
+
   if(d.fitMode === 'fit'){
     // Fit mode means "show me the whole original photo, exactly as-is" —
     // bypass the content-crop trim heuristic entirely (it's tuned for
@@ -2836,7 +2927,8 @@ async function runGeneration({ topicFocus = null, maxItems = '1' } = {}){
   const userPrompt = topicFocus
     ? `Find and write a draft for: ${topicFocus}`
     : `Find today's PC hardware/component news and write ${maxItems} caption drafts as specified.`;
-  const items = await fetchNewsBatch(systemPrompt, userPrompt);
+  const searchQuery = topicFocus || 'latest PC hardware GPU CPU gaming news updates this month';
+  const items = await fetchNewsBatch(systemPrompt, userPrompt, 1, searchQuery);
   const now = Date.now();
   return items.map((it, i) => ({
     id: `d_${now}_${i}`,
@@ -2864,18 +2956,18 @@ function sleep(ms){ return new Promise(res => setTimeout(res, ms)); }
 // source simply had nothing new this month). Retries once after a short
 // backoff on a 5xx/network failure, since those are usually transient
 // (rate limits, brief timeouts) rather than a real problem with the prompt.
-async function fetchNewsBatch(systemPrompt, userPrompt, attempt = 1){
+async function fetchNewsBatch(systemPrompt, userPrompt, attempt = 1, searchQuery = null){
   let response;
   try{
     response = await fetch(PROXY_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ systemPrompt, prompt: userPrompt })
+      body: JSON.stringify({ systemPrompt, prompt: userPrompt, searchQuery })
     });
   }catch(networkErr){
     if(attempt < 2){
       await sleep(2500);
-      return fetchNewsBatch(systemPrompt, userPrompt, attempt + 1);
+      return fetchNewsBatch(systemPrompt, userPrompt, attempt + 1, searchQuery);
     }
     throw new Error(`Network error reaching the AI proxy: ${networkErr.message || 'unknown error'}`);
   }
@@ -2890,7 +2982,7 @@ async function fetchNewsBatch(systemPrompt, userPrompt, attempt = 1){
 
     if(response.status >= 500 && attempt < 2){
       await sleep(2500);
-      return fetchNewsBatch(systemPrompt, userPrompt, attempt + 1);
+      return fetchNewsBatch(systemPrompt, userPrompt, attempt + 1, searchQuery);
     }
     throw new Error(`API error ${response.status}${detail ? ': ' + detail.slice(0, 200) : ''}`);
   }
@@ -2970,7 +3062,7 @@ async function generateDrafts(){
             const userPrompt = `Find every PC hardware/component AND gaming news article "${source}" published ${rangeText}, and write the Facebook caption drafts as specified for each one. Include hardware news AND any notable game updates, patches, or releases covered by this source. Skip any article not published within ${rangeText}.`;
             const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyle);
             try{
-              const sourceItems = await fetchNewsBatch(systemPrompt, userPrompt);
+              const sourceItems = await fetchNewsBatch(systemPrompt, userPrompt, 1, `${source} PC hardware gaming news ${rangeText}`);
               items = items.concat(sourceItems);
             }catch(err){
               console.warn(`Search failed for source "${source}" (${rangeText}):`, err);
@@ -2992,7 +3084,7 @@ async function generateDrafts(){
           const userPrompt = `Find PC hardware/component AND gaming news published ${rangeText} and write the Facebook caption drafts as specified. Include a mix: mostly hardware news, with 1-2 notable game updates or releases per batch. Skip any article not published within ${rangeText}. Return every distinct qualifying article from that window.`;
           const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyle);
           try{
-            const weekItems = await fetchNewsBatch(systemPrompt, userPrompt);
+            const weekItems = await fetchNewsBatch(systemPrompt, userPrompt, 1, `PC hardware GPU CPU gaming news ${rangeText}`);
             items = items.concat(weekItems);
           }catch(err){
             console.warn(`Search failed for week ${rangeText}:`, err);
@@ -3011,7 +3103,7 @@ async function generateDrafts(){
         : `Search broadly across reputable tech hardware outlets AND gaming news sites (IGN, Kotaku, PC Gamer, GameSpot, Polygon, or similar). Find PC hardware/component news AND notable game updates/releases/announcements published ${dateRangeText}. Skip anything published before ${monthStart}.`;
       const userPrompt = `Find this month's tech and gaming news and write the Facebook caption drafts as specified. Today is ${today.toDateString()}. Only include articles published ${dateRangeText}. Return a MIX: 4-5 items about PC hardware/components, and 1-2 items about notable game updates, patches, releases, or announcements (any platform: PC, console, or mobile). Total: 5-7 items.`;
       const systemPrompt = buildSystemPrompt(scopeConstraint, usdToPhpRate, graphicStyle);
-      items = await fetchNewsBatch(systemPrompt, userPrompt);
+      items = await fetchNewsBatch(systemPrompt, userPrompt, 1, `latest PC hardware GPU CPU gaming news ${monthLabel}`);
     }
 
     if(items.length === 0){
