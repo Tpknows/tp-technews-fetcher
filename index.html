@@ -1623,7 +1623,7 @@ feed.addEventListener('click', async (e) => {
       if(canvas){
         const a = document.createElement('a');
         a.download = `${(d.headline || 'post').slice(0,40).replace(/[^\w]+/g,'-')}.jpg`;
-        a.href = canvas.toDataURL('image/jpeg', 0.92);
+        a.href = canvas.toDataURL('image/jpeg', 0.96);
         document.body.appendChild(a); // required for download to fire on some mobile browsers
         a.click();
         a.remove();
@@ -1709,7 +1709,7 @@ feed.addEventListener('change', async (e) => {
     const sizeMB = file.size / (1024 * 1024);
     setStatus(sizeMB > 8 ? `Processing large photo (${sizeMB.toFixed(1)}MB)… this might take a moment` : 'Processing photo…');
     try{
-      const dataUrl = await compressImage(file, 1080, 0.85);
+      const dataUrl = await compressImage(file, 1080, 0.95);
       d.imageData = dataUrl;
       d.imageOffsetX = 0.5;
       d.imageOffsetY = 0.5;
@@ -1752,7 +1752,7 @@ async function postToFacebook(d){
   }
   setStatus(`🚀 Auto-posting "${(d.headline || '').slice(0, 40)}…" sa Facebook…`);
   try{
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.96));
     const formData = new FormData();
     formData.append('image', blob, 'post.jpg');
     formData.append('caption', d.caption || '');
@@ -1897,7 +1897,7 @@ function fetchImageAsDataUrl(url){
         const c = document.createElement('canvas');
         c.width = w; c.height = h;
         c.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(c.toDataURL('image/jpeg', 0.85));
+        resolve(c.toDataURL('image/jpeg', 0.95));
       }catch(e){
         reject(e);
       }
@@ -2346,24 +2346,30 @@ function drawCategoryBackground(ctx, W, imgAreaH, category){
 //   instead of plain bars.
 function drawPhotoIntoArea(ctx, photoImg, crop, areaX, areaY, areaW, areaH, d){
   if(d.fitMode === 'fit'){
+    // Fit mode means "show me the whole original photo, exactly as-is" —
+    // bypass the content-crop trim heuristic entirely (it's tuned for
+    // Cover mode's letterbox-bar detection and can misfire on photos with
+    // large intentional dark backgrounds, incorrectly trimming into the
+    // actual subject).
+    const full = { sx: 0, sy: 0, sw: photoImg.naturalWidth || photoImg.width, sh: photoImg.naturalHeight || photoImg.height };
     // Blurred cover-fill backdrop so the letterbox gaps aren't stark bars
     ctx.save();
     ctx.beginPath();
     ctx.rect(areaX, areaY, areaW, areaH);
     ctx.clip();
-    const bgScale = Math.max(areaW / crop.sw, areaH / crop.sh) * 1.15; // slight overscan hides blur edge artifacts
-    const bgW = crop.sw * bgScale, bgH = crop.sh * bgScale;
+    const bgScale = Math.max(areaW / full.sw, areaH / full.sh) * 1.15; // slight overscan hides blur edge artifacts
+    const bgW = full.sw * bgScale, bgH = full.sh * bgScale;
     const bgX = areaX + (areaW - bgW) / 2, bgY = areaY + (areaH - bgH) / 2;
     ctx.filter = 'blur(24px) brightness(0.55)';
-    ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, bgX, bgY, bgW, bgH);
+    ctx.drawImage(photoImg, full.sx, full.sy, full.sw, full.sh, bgX, bgY, bgW, bgH);
     ctx.filter = 'none';
     ctx.restore();
 
     // The full photo, contained (nothing cropped), centered in the area
-    const fitScale = Math.min(areaW / crop.sw, areaH / crop.sh);
-    const fw = crop.sw * fitScale, fh = crop.sh * fitScale;
+    const fitScale = Math.min(areaW / full.sw, areaH / full.sh);
+    const fw = full.sw * fitScale, fh = full.sh * fitScale;
     const fx = areaX + (areaW - fw) / 2, fy = areaY + (areaH - fh) / 2;
-    ctx.drawImage(photoImg, crop.sx, crop.sy, crop.sw, crop.sh, fx, fy, fw, fh);
+    ctx.drawImage(photoImg, full.sx, full.sy, full.sw, full.sh, fx, fy, fw, fh);
   } else {
     // Cover-fit with a small overscan so both pan sliders always have real
     // range (without it, a landscape photo leaves zero vertical slack, and
