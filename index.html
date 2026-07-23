@@ -253,6 +253,7 @@
   .mini-btn.copy.copied{ color: var(--trace); border-color: var(--trace-dim); }
   .mini-btn.approve{ color: var(--trace); }
   .mini-btn.posted{ color: var(--gray); }
+  .mini-btn.recall{ color: var(--amber); }
   .mini-btn.delete{ color: var(--danger); margin-left: auto; }
   .mini-btn.active{ background: var(--trace-dim); color: #0a0f0d; border-color: var(--trace); font-weight: 600; }
 
@@ -1544,6 +1545,7 @@ function render(){
           <button class="mini-btn copy" data-action="copy" data-id="${d.id}">Copy feed caption</button>
           ${d.status === 'draft' ? `<button class="mini-btn approve" data-action="approve" data-id="${d.id}">✓ Approve</button>` : ''}
           ${d.status === 'approved' ? `<button class="mini-btn posted" data-action="posted" data-id="${d.id}">Mark posted</button>` : ''}
+          ${d.status === 'approved' ? `<button class="mini-btn recall" data-action="recall" data-id="${d.id}" title="Ibalik sa Draft para ma-edit at mag-Approve ulit">↩ Recall</button>` : ''}
           <button class="mini-btn delete" data-action="delete" data-id="${d.id}">Delete</button>
         </div>
         </div><!-- /card-left -->
@@ -1744,6 +1746,15 @@ feed.addEventListener('click', async (e) => {
     render();
   } else if(action === 'posted'){
     d.status = 'posted'; await saveDrafts(true); render();
+  } else if(action === 'recall'){
+    // Reverts an "approved" draft back to "draft" — for cases where it was
+    // approved before auto-post actually worked (e.g. token/permission
+    // issues), so it never really got posted. Just flips status; nothing
+    // else about the draft changes, and it can be edited/re-approved normally.
+    d.status = 'draft';
+    await saveDrafts(true);
+    render();
+    setStatus(`"${(d.headline || '').slice(0, 50)}" ibinalik sa Draft.`);
   } else if(action === 'delete'){
     drafts = drafts.filter(x => x.id !== id);
     await saveDrafts(true); render();
