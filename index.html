@@ -532,6 +532,7 @@ function renderTemplates(){
       <span class="template-name">${escapeHtml(t.name)}</span>
       <span class="template-handle">@${escapeHtml(t.handle)}</span>
       <button data-action="use" data-id="${t.id}">${t.id === activeTemplateId ? '✓ Active' : 'Use'}</button>
+      <button data-action="toggle-autopost" data-id="${t.id}" title="Kapag Approve ang draft, direktang mag-a-auto-post sa FB page na ito" style="${t.autoPost ? 'color:#4ade80;border-color:#4ade80;' : ''}">${t.autoPost ? '🟢 Auto-post' : '⚪ Manual'}</button>
       <button data-action="delete" data-id="${t.id}">✕</button>
     </div>
   `).join('');
@@ -574,7 +575,15 @@ document.getElementById('templateList').addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-action]');
   if(!btn) return;
   const id = btn.dataset.id;
-  if(btn.dataset.action === 'use'){
+  if(btn.dataset.action === 'toggle-autopost'){
+    const t = templates.find(x => x.id === id);
+    if(t){
+      t.autoPost = !t.autoPost;
+      renderTemplates();
+      await saveSettings();
+      await saveTemplatesToLocal();
+    }
+  } else if(btn.dataset.action === 'use'){
     activeTemplateId = id;
     const t = getActiveTemplate();
     if(t){
@@ -611,7 +620,7 @@ document.getElementById('templateAddBtn').addEventListener('click', async () => 
     ? hashtagsInput.value.split(',').map(h => h.trim().replace(/^#/, '')).filter(Boolean)
     : [];
   if(!name || !handle) return;
-  const newTemplate = { id: `tpl_${Date.now()}`, name, handle, color, hashtags };
+  const newTemplate = { id: `tpl_${Date.now()}`, name, handle, color, hashtags, autoPost: false };
   templates.push(newTemplate);
   if(!activeTemplateId){
     activeTemplateId = newTemplate.id;
@@ -1390,6 +1399,10 @@ feed.addEventListener('click', async (e) => {
     }
   } else if(action === 'approve'){
     d.status = 'approved'; await saveDrafts(true); render();
+    const activeTpl = getActiveTemplate();
+    if(activeTpl && activeTpl.autoPost){
+      await postToFacebook(d);
+    }
   } else if(action === 'posted'){
     d.status = 'posted'; await saveDrafts(true); render();
   } else if(action === 'delete'){
@@ -1434,6 +1447,37 @@ feed.addEventListener('change', async (e) => {
 // Cloudflare Worker proxy — used both for the Gemini API call and for
 // pulling article hero images (bypasses CORS on hotlinked images)
 const PROXY_URL = "https://tp-technews-fetcher.tammy-padal.workers.dev";
+
+// ── Auto-post to Facebook ────────────────────────────────────────────────
+// Sends the finished graphic (canvas blob) + caption to a Worker endpoint
+// which forwards it to the Facebook Graph API. Requires /post-to-facebook
+// endpoint + Meta App + Page Access Token to be set up server-side.
+// Fails gracefully with a clear status message until then.
+async function postToFacebook(d){
+  const canvas = document.getElementById(`canvas-${d.id}`);
+  if(!canvas){
+    setStatus('Walang na-render na graphic para i-post — kailangan munang may photo/graphic bago mag-Approve.', true);
+    return;
+  }
+  setStatus(`🚀 Auto-posting "${(d.headline || '').slice(0, 40)}…" sa Facebook…`);
+  try{
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.96));
+    const formData = new FormData();
+    formData.append('image', blob, 'post.jpg');
+    formData.append('caption', d.caption || '');
+    const res = await fetch(`${PROXY_URL}/post-to-facebook`, { method: 'POST', body: formData });
+    if(!res.ok) throw new Error(`Worker responded ${res.status}`);
+    const data = await res.json();
+    if(data.error) throw new Error(data.error);
+    d.status = 'posted';
+    await saveDrafts(true);
+    render();
+    setStatus('✅ Na-post na sa Facebook!');
+  }catch(err){
+    console.error('Auto-post failed:', err);
+    setStatus('⚠️ Naka-enable ang Auto-post pero hindi pa gumagana — kailangan pang i-set up ang /post-to-facebook endpoint sa Worker (kasama ang Meta App + Page Access Token). Manual muna: i-download at i-post mismo.', true);
+  }
+}
 
 // ── Live USD→PHP exchange rate ──────────────────────────────────
 // Free, no-API-key endpoint (open.er-api.com) — updates once a day.
